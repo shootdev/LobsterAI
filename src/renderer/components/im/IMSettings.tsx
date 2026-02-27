@@ -1,6 +1,6 @@
 /**
  * IM Settings Component
- * Configuration UI for DingTalk, Feishu and Telegram IM bots
+ * Configuration UI for all IM bot channels
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -8,7 +8,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { RootState } from '../../store';
 import { imService } from '../../services/im';
-import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, clearError } from '../../store/slices/imSlice';
+import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, setImnutConfig, clearError } from '../../store/slices/imSlice';
 import { i18nService } from '../../services/i18n';
 import type { IMPlatform, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
@@ -20,6 +20,7 @@ const platformMeta: Record<IMPlatform, { label: string; logo: string }> = {
   telegram: { label: 'Telegram', logo: 'telegram.svg' },
   discord: { label: 'Discord', logo: 'discord.svg' },
   nim: { label: '云信', logo: 'nim.png' },
+  imnut: { label: 'IMNut', logo: 'qzhuli.png' },
 };
 
 const verdictColorClass: Record<IMConnectivityTestResult['verdict'], string> = {
@@ -92,6 +93,25 @@ const IMSettings: React.FC = () => {
   // Handle NIM config change
   const handleNimChange = (field: 'appKey' | 'account' | 'token', value: string) => {
     dispatch(setNimConfig({ [field]: value }));
+  };
+
+  // Handle IMNut config change
+  const handleImnutChange = (
+    field: 'environment' | 'convId' | 'senderCid' | 'wsToken',
+    value: string
+  ) => {
+    dispatch(setImnutConfig({ [field]: value }));
+  };
+
+  const handleImnutEnvironmentChange = async (environment: 'dev' | 'release') => {
+    dispatch(setImnutConfig({ environment }));
+    if (!configLoaded) return;
+    await imService.updateConfig({
+      imnut: {
+        ...config.imnut,
+        environment,
+      },
+    });
   };
 
   // Save config on blur (only save current platform to avoid overwriting other platforms with defaults)
@@ -169,11 +189,12 @@ const IMSettings: React.FC = () => {
     }
   };
 
-  const dingtalkConnected = status.dingtalk.connected;
-  const feishuConnected = status.feishu.connected;
-  const telegramConnected = status.telegram.connected;
-  const discordConnected = status.discord.connected;
-  const nimConnected = status.nim.connected;
+  const dingtalkConnected = status.dingtalk?.connected ?? false;
+  const feishuConnected = status.feishu?.connected ?? false;
+  const telegramConnected = status.telegram?.connected ?? false;
+  const discordConnected = status.discord?.connected ?? false;
+  const nimConnected = status.nim?.connected ?? false;
+  const imnutConnected = status.imnut?.connected ?? false;
 
   // Compute visible platforms based on language
   const platforms = useMemo<IMPlatform[]>(() => {
@@ -202,6 +223,9 @@ const IMSettings: React.FC = () => {
     if (platform === 'nim') {
       return !!(config.nim.appKey && config.nim.account && config.nim.token);
     }
+    if (platform === 'imnut') {
+      return !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
+    }
     return !!(config.feishu.appId && config.feishu.appSecret);
   };
 
@@ -216,6 +240,7 @@ const IMSettings: React.FC = () => {
     if (platform === 'telegram') return telegramConnected;
     if (platform === 'discord') return discordConnected;
     if (platform === 'nim') return nimConnected;
+    if (platform === 'imnut') return imnutConnected;
     return feishuConnected;
   };
 
@@ -251,6 +276,7 @@ const IMSettings: React.FC = () => {
       telegram: setTelegramConfig,
       discord: setDiscordConfig,
       nim: setNimConfig,
+      imnut: setImnutConfig,
     };
     return actionMap[platform];
   };
@@ -690,16 +716,127 @@ const IMSettings: React.FC = () => {
             </div>
 
             {/* Bot account display */}
-            {status.nim.botAccount && (
+            {status.nim?.botAccount && (
               <div className="text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
-                Account: {status.nim.botAccount}
+                Account: {status.nim?.botAccount}
               </div>
             )}
 
             {/* Error display */}
-            {status.nim.lastError && (
+            {status.nim?.lastError && (
               <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">
-                {status.nim.lastError}
+                {status.nim?.lastError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* IMNut Settings */}
+        {activePlatform === 'imnut' && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                Environment
+              </label>
+              <div className="inline-flex rounded-lg border dark:border-claude-darkBorder/60 border-claude-border/60 overflow-hidden">
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void handleImnutEnvironmentChange('dev');
+                  }}
+                  onClick={() => {
+                    void handleImnutEnvironmentChange('dev');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    config.imnut.environment === 'dev'
+                      ? 'bg-claude-accent text-white'
+                      : 'dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:text-claude-darkText text-claude-text'
+                  }`}
+                >
+                  Dev
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void handleImnutEnvironmentChange('release');
+                  }}
+                  onClick={() => {
+                    void handleImnutEnvironmentChange('release');
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    config.imnut.environment === 'release'
+                      ? 'bg-claude-accent text-white'
+                      : 'dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:text-claude-darkText text-claude-text'
+                  }`}
+                >
+                  Release
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                Conv ID
+              </label>
+              <input
+                type="text"
+                value={config.imnut.convId}
+                onChange={(e) => handleImnutChange('convId', e.target.value)}
+                onBlur={handleSaveConfig}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+                placeholder="conv_xxx"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                Sender CID
+              </label>
+              <input
+                type="text"
+                value={config.imnut.senderCid}
+                onChange={(e) => handleImnutChange('senderCid', e.target.value)}
+                onBlur={handleSaveConfig}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+                placeholder="optional_sender_cid"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                WebSocket Token
+              </label>
+              <input
+                type="password"
+                value={config.imnut.wsToken}
+                onChange={(e) => handleImnutChange('wsToken', e.target.value)}
+                onBlur={handleSaveConfig}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+                placeholder="optional_ws_token"
+              />
+            </div>
+
+            <p className="text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary">
+              {config.imnut.environment === 'release'
+                ? 'Current host: im.qzhuli.com'
+                : 'Current host: test.im.qzhuli.com'}
+            </p>
+
+            <div className="pt-1">
+              {renderConnectivityTestButton('imnut')}
+            </div>
+
+            {status.imnut?.lastWsUrl && (
+              <div className="text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
+                WS: {status.imnut?.lastWsUrl}
+              </div>
+            )}
+
+            {status.imnut?.lastError && (
+              <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">
+                {status.imnut?.lastError}
               </div>
             )}
           </div>

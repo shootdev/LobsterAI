@@ -11,6 +11,7 @@ import {
   TelegramConfig,
   DiscordConfig,
   NimConfig,
+  ImnutConfig,
   IMSettings,
   IMPlatform,
   IMSessionMapping,
@@ -19,6 +20,7 @@ import {
   DEFAULT_TELEGRAM_CONFIG,
   DEFAULT_DISCORD_CONFIG,
   DEFAULT_NIM_CONFIG,
+  DEFAULT_IMNUT_CONFIG,
   DEFAULT_IM_SETTINGS,
 } from './types';
 
@@ -61,7 +63,7 @@ export class IMStore {
    * Migrate existing IM configs to ensure stable defaults.
    */
   private migrateDefaults(): void {
-    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim'] as const;
+    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim', 'imnut'] as const;
     let changed = false;
 
     for (const platform of platforms) {
@@ -162,6 +164,7 @@ export class IMStore {
     const telegram = this.getConfigValue<TelegramConfig>('telegram') ?? DEFAULT_TELEGRAM_CONFIG;
     const discord = this.getConfigValue<DiscordConfig>('discord') ?? DEFAULT_DISCORD_CONFIG;
     const nim = this.getConfigValue<NimConfig>('nim') ?? DEFAULT_NIM_CONFIG;
+    const imnut = this.getConfigValue<ImnutConfig>('imnut') ?? DEFAULT_IMNUT_CONFIG;
     const settings = this.getConfigValue<IMSettings>('settings') ?? DEFAULT_IM_SETTINGS;
 
     // Resolve enabled field: default to false for safety
@@ -181,6 +184,7 @@ export class IMStore {
       telegram: resolveEnabled(telegram, DEFAULT_TELEGRAM_CONFIG),
       discord: resolveEnabled(discord, DEFAULT_DISCORD_CONFIG),
       nim: resolveEnabled(nim, DEFAULT_NIM_CONFIG),
+      imnut: resolveEnabled(imnut, DEFAULT_IMNUT_CONFIG),
       settings: { ...DEFAULT_IM_SETTINGS, ...settings },
     };
   }
@@ -200,6 +204,9 @@ export class IMStore {
     }
     if (config.nim) {
       this.setNimConfig(config.nim);
+    }
+    if (config.imnut) {
+      this.setImnutConfig(config.imnut);
     }
     if (config.settings) {
       this.setIMSettings(config.settings);
@@ -266,6 +273,18 @@ export class IMStore {
     this.setConfigValue('nim', { ...current, ...config });
   }
 
+  // ==================== IMNut Config ====================
+
+  getImnutConfig(): ImnutConfig {
+    const stored = this.getConfigValue<ImnutConfig>('imnut');
+    return { ...DEFAULT_IMNUT_CONFIG, ...stored };
+  }
+
+  setImnutConfig(config: Partial<ImnutConfig>): void {
+    const current = this.getImnutConfig();
+    this.setConfigValue('imnut', { ...current, ...config });
+  }
+
   // ==================== IM Settings ====================
 
   getIMSettings(): IMSettings {
@@ -298,7 +317,8 @@ export class IMStore {
     const hasTelegram = !!config.telegram.botToken;
     const hasDiscord = !!config.discord.botToken;
     const hasNim = !!(config.nim.appKey && config.nim.account && config.nim.token);
-    return hasDingTalk || hasFeishu || hasTelegram || hasDiscord || hasNim;
+    const hasImnut = !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
+    return hasDingTalk || hasFeishu || hasTelegram || hasDiscord || hasNim || hasImnut;
   }
 
   // ==================== Notification Target Persistence ====================

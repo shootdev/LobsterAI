@@ -102,9 +102,33 @@ export interface NimGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+// ==================== IMNut Types ====================
+
+export interface ImnutConfig {
+  enabled: boolean;
+  environment: 'dev' | 'release';
+  convId: string;
+  senderCid: string;
+  wsToken: string;
+  reconnectMs: number;
+  maxReconnectMs: number;
+  maxReconnectAttempts: number;
+  heartbeatMs: number;
+  debug?: boolean;
+}
+
+export interface ImnutGatewayStatus {
+  connected: boolean;
+  startedAt: number | null;
+  lastError: string | null;
+  lastWsUrl: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+}
+
 // ==================== Common IM Types ====================
 
-export type IMPlatform = 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim';
+export type IMPlatform = 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut';
 
 export interface IMGatewayConfig {
   dingtalk: DingTalkConfig;
@@ -112,6 +136,7 @@ export interface IMGatewayConfig {
   telegram: TelegramConfig;
   discord: DiscordConfig;
   nim: NimConfig;
+  imnut: ImnutConfig;
   settings: IMSettings;
 }
 
@@ -126,6 +151,7 @@ export interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
+  imnut: ImnutGatewayStatus;
 }
 
 // ==================== Media Attachment Types ====================
@@ -193,7 +219,8 @@ export type IMConnectivityCheckCode =
   | 'discord_group_requires_mention'
   | 'telegram_privacy_mode_hint'
   | 'dingtalk_bot_membership_hint'
-  | 'nim_p2p_only_hint';
+  | 'nim_p2p_only_hint'
+  | 'imnut_bridge_hint';
 
 export interface IMConnectivityCheck {
   code: IMConnectivityCheckCode;
@@ -255,6 +282,19 @@ export const DEFAULT_NIM_CONFIG: NimConfig = {
   debug: true,
 };
 
+export const DEFAULT_IMNUT_CONFIG: ImnutConfig = {
+  enabled: false,
+  environment: 'dev',
+  convId: '',
+  senderCid: '',
+  wsToken: '',
+  reconnectMs: 2000,
+  maxReconnectMs: 30000,
+  maxReconnectAttempts: 0,
+  heartbeatMs: 25000,
+  debug: true,
+};
+
 export const DEFAULT_IM_SETTINGS: IMSettings = {
   systemPrompt: '',
   skillsEnabled: true,
@@ -266,6 +306,7 @@ export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
   telegram: DEFAULT_TELEGRAM_CONFIG,
   discord: DEFAULT_DISCORD_CONFIG,
   nim: DEFAULT_NIM_CONFIG,
+  imnut: DEFAULT_IMNUT_CONFIG,
   settings: DEFAULT_IM_SETTINGS,
 };
 
@@ -307,6 +348,14 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
     startedAt: null,
     lastError: null,
     botAccount: null,
+    lastInboundAt: null,
+    lastOutboundAt: null,
+  },
+  imnut: {
+    connected: false,
+    startedAt: null,
+    lastError: null,
+    lastWsUrl: null,
     lastInboundAt: null,
     lastOutboundAt: null,
   },

@@ -12,6 +12,7 @@ import type {
   TelegramConfig,
   DiscordConfig,
   NimConfig,
+  ImnutConfig,
   IMSettings,
 } from '../../types/im';
 import {
@@ -38,7 +39,18 @@ const imSlice = createSlice({
   initialState,
   reducers: {
     setConfig: (state, action: PayloadAction<IMGatewayConfig>) => {
-      state.config = action.payload;
+      const config = action.payload as Partial<IMGatewayConfig>;
+      state.config = {
+        ...DEFAULT_IM_CONFIG,
+        ...config,
+        dingtalk: { ...DEFAULT_IM_CONFIG.dingtalk, ...(config.dingtalk || {}) },
+        feishu: { ...DEFAULT_IM_CONFIG.feishu, ...(config.feishu || {}) },
+        telegram: { ...DEFAULT_IM_CONFIG.telegram, ...(config.telegram || {}) },
+        discord: { ...DEFAULT_IM_CONFIG.discord, ...(config.discord || {}) },
+        nim: { ...DEFAULT_IM_CONFIG.nim, ...(config.nim || {}) },
+        imnut: { ...DEFAULT_IM_CONFIG.imnut, ...(config.imnut || {}) },
+        settings: { ...DEFAULT_IM_CONFIG.settings, ...(config.settings || {}) },
+      };
     },
     setDingTalkConfig: (state, action: PayloadAction<Partial<DingTalkConfig>>) => {
       state.config.dingtalk = { ...state.config.dingtalk, ...action.payload };
@@ -55,11 +67,24 @@ const imSlice = createSlice({
     setNimConfig: (state, action: PayloadAction<Partial<NimConfig>>) => {
       state.config.nim = { ...state.config.nim, ...action.payload };
     },
+    setImnutConfig: (state, action: PayloadAction<Partial<ImnutConfig>>) => {
+      state.config.imnut = { ...state.config.imnut, ...action.payload };
+    },
     setIMSettings: (state, action: PayloadAction<Partial<IMSettings>>) => {
       state.config.settings = { ...state.config.settings, ...action.payload };
     },
     setStatus: (state, action: PayloadAction<IMGatewayStatus>) => {
-      state.status = action.payload;
+      const status = action.payload as Partial<IMGatewayStatus>;
+      state.status = {
+        ...DEFAULT_IM_STATUS,
+        ...status,
+        dingtalk: { ...DEFAULT_IM_STATUS.dingtalk, ...(status.dingtalk || {}) },
+        feishu: { ...DEFAULT_IM_STATUS.feishu, ...(status.feishu || {}) },
+        telegram: { ...DEFAULT_IM_STATUS.telegram, ...(status.telegram || {}) },
+        discord: { ...DEFAULT_IM_STATUS.discord, ...(status.discord || {}) },
+        nim: { ...DEFAULT_IM_STATUS.nim, ...(status.nim || {}) },
+        imnut: { ...DEFAULT_IM_STATUS.imnut, ...(status.imnut || {}) },
+      };
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
@@ -80,6 +105,7 @@ export const {
   setTelegramConfig,
   setDiscordConfig,
   setNimConfig,
+  setImnutConfig,
   setIMSettings,
   setStatus,
   setLoading,

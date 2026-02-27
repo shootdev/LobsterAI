@@ -1,6 +1,6 @@
 /**
  * IM Gateway Manager
- * Unified manager for DingTalk, Feishu and Telegram gateways
+ * Unified manager for all IM gateways (DingTalk/Feishu/Telegram/Discord/NIM/IMNut)
  */
 
 import { EventEmitter } from 'events';
@@ -9,6 +9,7 @@ import { FeishuGateway } from './feishuGateway';
 import { TelegramGateway } from './telegramGateway';
 import { DiscordGateway } from './discordGateway';
 import { NimGateway } from './nimGateway';
+import { ImnutGateway } from './imnutGateway';
 import { IMChatHandler } from './imChatHandler';
 import { IMCoworkHandler } from './imCoworkHandler';
 import { IMStore } from './imStore';
@@ -53,6 +54,7 @@ export class IMGatewayManager extends EventEmitter {
   private telegramGateway: TelegramGateway;
   private discordGateway: DiscordGateway;
   private nimGateway: NimGateway;
+  private imnutGateway: ImnutGateway;
   private imStore: IMStore;
   private chatHandler: IMChatHandler | null = null;
   private coworkHandler: IMCoworkHandler | null = null;
@@ -72,6 +74,7 @@ export class IMGatewayManager extends EventEmitter {
     this.telegramGateway = new TelegramGateway();
     this.discordGateway = new DiscordGateway();
     this.nimGateway = new NimGateway();
+    this.imnutGateway = new ImnutGateway();
 
     // Store Cowork dependencies if provided
     if (options?.coworkRunner && options?.coworkStore) {
@@ -167,6 +170,24 @@ export class IMGatewayManager extends EventEmitter {
     this.nimGateway.on('message', (message: IMMessage) => {
       this.emit('message', message);
     });
+
+    // IMNut events
+    this.imnutGateway.on('status', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.imnutGateway.on('connected', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.imnutGateway.on('disconnected', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.imnutGateway.on('error', (error) => {
+      this.emit('error', { platform: 'imnut', error });
+      this.emit('statusChange', this.getStatus());
+    });
+    this.imnutGateway.on('message', (message: IMMessage) => {
+      this.emit('message', message);
+    });
   }
 
   /**
@@ -199,6 +220,10 @@ export class IMGatewayManager extends EventEmitter {
     if (this.nimGateway && !this.nimGateway.isConnected()) {
       console.log('[IMGatewayManager] Reconnecting NIM...');
       this.nimGateway.reconnectIfNeeded();
+    }
+    if (this.imnutGateway && !this.imnutGateway.isConnected()) {
+      console.log('[IMGatewayManager] Reconnecting IMNut...');
+      this.imnutGateway.reconnectIfNeeded();
     }
   }
 
@@ -268,6 +293,7 @@ export class IMGatewayManager extends EventEmitter {
     this.telegramGateway.setMessageCallback(messageHandler);
     this.discordGateway.setMessageCallback(messageHandler);
     this.nimGateway.setMessageCallback(messageHandler);
+    this.imnutGateway.setMessageCallback(messageHandler);
   }
 
   /**
@@ -396,6 +422,7 @@ export class IMGatewayManager extends EventEmitter {
       telegram: this.telegramGateway.getStatus(),
       discord: this.discordGateway.getStatus(),
       nim: this.nimGateway.getStatus(),
+      imnut: this.imnutGateway.getStatus(),
     };
   }
 
@@ -585,6 +612,13 @@ export class IMGatewayManager extends EventEmitter {
         message: '云信 IM 当前仅支持 P2P（私聊）消息。',
         suggestion: '请通过私聊方式向机器人账号发送消息触发对话。',
       });
+    } else if (platform === 'imnut') {
+      addCheck({
+        code: 'imnut_bridge_hint',
+        level: 'info',
+        message: 'IMNut 通过 websocket 入站 + HTTP 回发桥接消息。',
+        suggestion: '请确认 senderCid、convId、wsToken 填写正确，且环境域名可访问。',
+      });
     }
 
     return {
@@ -616,6 +650,8 @@ export class IMGatewayManager extends EventEmitter {
       await this.discordGateway.start(config.discord);
     } else if (platform === 'nim') {
       await this.nimGateway.start(config.nim);
+    } else if (platform === 'imnut') {
+      await this.imnutGateway.start(config.imnut);
     }
 
     // Restore persisted notification target
@@ -636,6 +672,8 @@ export class IMGatewayManager extends EventEmitter {
       await this.discordGateway.stop();
     } else if (platform === 'nim') {
       await this.nimGateway.stop();
+    } else if (platform === 'imnut') {
+      await this.imnutGateway.stop();
     }
   }
 
@@ -684,6 +722,14 @@ export class IMGatewayManager extends EventEmitter {
         console.error(`[IMGatewayManager] Failed to start NIM: ${error.message}`);
       }
     }
+
+    if (config.imnut.enabled && config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken) {
+      try {
+        await this.startGateway('imnut');
+      } catch (error: any) {
+        console.error(`[IMGatewayManager] Failed to start IMNut: ${error.message}`);
+      }
+    }
   }
 
   /**
@@ -696,6 +742,7 @@ export class IMGatewayManager extends EventEmitter {
       this.telegramGateway.stop(),
       this.discordGateway.stop(),
       this.nimGateway.stop(),
+      this.imnutGateway.stop(),
     ]);
   }
 
@@ -703,7 +750,12 @@ export class IMGatewayManager extends EventEmitter {
    * Check if any gateway is connected
    */
   isAnyConnected(): boolean {
-    return this.dingtalkGateway.isConnected() || this.feishuGateway.isConnected() || this.telegramGateway.isConnected() || this.discordGateway.isConnected() || this.nimGateway.isConnected();
+    return this.dingtalkGateway.isConnected()
+      || this.feishuGateway.isConnected()
+      || this.telegramGateway.isConnected()
+      || this.discordGateway.isConnected()
+      || this.nimGateway.isConnected()
+      || this.imnutGateway.isConnected();
   }
 
   /**
@@ -721,6 +773,9 @@ export class IMGatewayManager extends EventEmitter {
     }
     if (platform === 'nim') {
       return this.nimGateway.isConnected();
+    }
+    if (platform === 'imnut') {
+      return this.imnutGateway.isConnected();
     }
     return this.feishuGateway.isConnected();
   }
@@ -747,6 +802,8 @@ export class IMGatewayManager extends EventEmitter {
         await this.discordGateway.sendNotification(text);
       } else if (platform === 'nim') {
         await this.nimGateway.sendNotification(text);
+      } else if (platform === 'imnut') {
+        await this.imnutGateway.sendNotification(text);
       }
       return true;
     } catch (error: any) {
@@ -793,6 +850,7 @@ export class IMGatewayManager extends EventEmitter {
       telegram: { ...current.telegram, ...(configOverride.telegram || {}) },
       discord: { ...current.discord, ...(configOverride.discord || {}) },
       nim: { ...current.nim, ...(configOverride.nim || {}) },
+      imnut: { ...current.imnut, ...(configOverride.imnut || {}) },
       settings: { ...current.settings, ...(configOverride.settings || {}) },
     };
   }
@@ -818,6 +876,13 @@ export class IMGatewayManager extends EventEmitter {
       if (!config.nim.appKey) fields.push('appKey');
       if (!config.nim.account) fields.push('account');
       if (!config.nim.token) fields.push('token');
+      return fields;
+    }
+    if (platform === 'imnut') {
+      const fields: string[] = [];
+      if (!config.imnut.senderCid) fields.push('senderCid');
+      if (!config.imnut.convId) fields.push('convId');
+      if (!config.imnut.wsToken) fields.push('wsToken');
       return fields;
     }
     return config.discord.botToken ? [] : ['botToken'];
@@ -872,6 +937,12 @@ export class IMGatewayManager extends EventEmitter {
       // check will happen when the user enables the gateway and the SDK logs in.
       return `云信配置已填写（Account: ${config.nim.account}）。请启用渠道，SDK 登录时将完成实际凭证验证。`;
     }
+    if (platform === 'imnut') {
+      if (this.imnutGateway.isConnected()) {
+        return `IMNut 连通（SenderCID: ${config.imnut.senderCid}，convId: ${config.imnut.convId}）。`;
+      }
+      return `IMNut 配置已填写（SenderCID: ${config.imnut.senderCid}，convId: ${config.imnut.convId}，wsToken: 已配置）。`;
+    }
     const response = await fetchJsonWithTimeout<DiscordUserResponse>('https://discord.com/api/v10/users/@me', {
       headers: {
         Authorization: `Bot ${config.discord.botToken}`,
@@ -906,6 +977,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'dingtalk') return status.dingtalk.startedAt;
     if (platform === 'telegram') return status.telegram.startedAt;
     if (platform === 'nim') return status.nim.startedAt;
+    if (platform === 'imnut') return status.imnut.startedAt;
     return status.discord.startedAt;
   }
 
@@ -914,6 +986,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastInboundAt;
     if (platform === 'telegram') return status.telegram.lastInboundAt;
     if (platform === 'nim') return status.nim.lastInboundAt;
+    if (platform === 'imnut') return status.imnut.lastInboundAt;
     return status.discord.lastInboundAt;
   }
 
@@ -922,6 +995,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastOutboundAt;
     if (platform === 'telegram') return status.telegram.lastOutboundAt;
     if (platform === 'nim') return status.nim.lastOutboundAt;
+    if (platform === 'imnut') return status.imnut.lastOutboundAt;
     return status.discord.lastOutboundAt;
   }
 
@@ -930,6 +1004,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.error;
     if (platform === 'telegram') return status.telegram.lastError;
     if (platform === 'nim') return status.nim.lastError;
+    if (platform === 'imnut') return status.imnut.lastError;
     return status.discord.lastError;
   }
 
