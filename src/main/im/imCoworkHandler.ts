@@ -53,6 +53,7 @@ export class IMCoworkHandler extends EventEmitter {
   private imSessionIds: Set<string> = new Set();
   private sessionConversationMap: Map<string, { conversationId: string; platform: IMPlatform }> = new Map();
   private pendingPermissionByConversation: Map<string, PendingIMPermission> = new Map();
+  private processingSessionIds: Set<string> = new Set();
 
   constructor(options: IMCoworkHandlerOptions) {
     super();
@@ -116,6 +117,7 @@ export class IMCoworkHandler extends EventEmitter {
     });
 
     const responsePromise = this.createAccumulatorPromise(coworkSessionId);
+    this.processingSessionIds.add(coworkSessionId);
 
     // Start or continue session
     const isActive = this.coworkRunner.isSessionActive(coworkSessionId);
@@ -169,7 +171,15 @@ export class IMCoworkHandler extends EventEmitter {
       }).catch(onSessionStartError);
     }
 
-    return responsePromise;
+    try {
+      return await responsePromise;
+    } finally {
+      this.processingSessionIds.delete(coworkSessionId);
+    }
+  }
+
+  isSessionProcessing(sessionId: string): boolean {
+    return this.processingSessionIds.has(sessionId);
   }
 
   /**
@@ -636,6 +646,7 @@ export class IMCoworkHandler extends EventEmitter {
     }
     this.messageAccumulators.clear();
     this.imSessionIds.clear();
+    this.processingSessionIds.clear();
     this.sessionConversationMap.clear();
 
     for (const [key, pending] of this.pendingPermissionByConversation.entries()) {

@@ -189,6 +189,14 @@ export class ImnutGateway extends EventEmitter {
     await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
   }
 
+  async sendToConversation(conversationId: string, text: string): Promise<void> {
+    const convId = (conversationId || '').trim();
+    if (!convId) {
+      throw new Error('IMNut conversationId is required');
+    }
+    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
+  }
+
   private startHeartbeat(): void {
     this.stopHeartbeat();
     const heartbeatMs = this.config?.heartbeatMs ?? 0;

@@ -789,6 +789,49 @@ export class IMGatewayManager extends EventEmitter {
     return this.feishuGateway.isConnected();
   }
 
+  getMappedConversationIdByCoworkSession(
+    coworkSessionId: string,
+    platform: IMPlatform = 'imnut'
+  ): string | null {
+    if (!coworkSessionId) return null;
+    const mappings = this.imStore.listSessionMappings(platform);
+    const matched = mappings.find((mapping) => mapping.coworkSessionId === coworkSessionId);
+    const conversationId = matched?.imConversationId || null;
+    if (!conversationId) {
+      console.info('[IMGatewayManager] No session mapping found for cowork session', { coworkSessionId, platform });
+    }
+    return conversationId;
+  }
+
+  isCoworkSessionProcessingFromIM(sessionId: string): boolean {
+    return this.coworkHandler?.isSessionProcessing(sessionId) ?? false;
+  }
+
+  async sendImnutConversationMessage(conversationId: string, text: string): Promise<boolean> {
+    if (!this.isConnected('imnut')) {
+      console.warn('[IMGatewayManager] Cannot send IMNut conversation message: imnut is not connected', {
+        conversationId,
+        textLength: text.length,
+      });
+      return false;
+    }
+
+    try {
+      await this.imnutGateway.sendToConversation(conversationId, text);
+      console.info('[IMGatewayManager] Sent IMNut conversation message', {
+        conversationId,
+        textLength: text.length,
+      });
+      return true;
+    } catch (error: any) {
+      console.error('[IMGatewayManager] Failed to send IMNut conversation message:', error.message, {
+        conversationId,
+        textLength: text.length,
+      });
+      return false;
+    }
+  }
+
   /**
    * Send a notification message through a specific platform.
    * Uses platform-specific broadcast mechanisms.
