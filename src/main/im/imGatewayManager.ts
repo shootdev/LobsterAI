@@ -29,6 +29,8 @@ import type { CoworkRunner } from '../libs/coworkRunner';
 import type { CoworkStore } from '../coworkStore';
 const CONNECTIVITY_TIMEOUT_MS = 10_000;
 const INBOUND_ACTIVITY_WARN_AFTER_MS = 2 * 60 * 1000;
+const IMNUT_HOST_DEV = 'test.im.qzhuli.com';
+const IMNUT_HOST_RELEASE = 'im.qzhuli.com';
 
 interface TelegramGetMeResponse {
   ok?: boolean;
@@ -41,6 +43,13 @@ interface TelegramGetMeResponse {
 interface DiscordUserResponse {
   username?: string;
   discriminator?: string;
+}
+
+interface ImnutBindStatusPayload {
+  status?: 'pending' | 'bound';
+  conv_id?: string;
+  cid?: string;
+  token?: string;
 }
 
 export interface IMGatewayManagerOptions {
@@ -1016,5 +1025,24 @@ export class IMGatewayManager extends EventEmitter {
       return 'warn';
     }
     return 'pass';
+  }
+
+  async getImnutBindStatus(
+    key: string,
+    environment: 'dev' | 'release'
+  ): Promise<{ status: 'pending' | 'bound'; convId?: string; cid?: string; token?: string }> {
+    const host = environment === 'release' ? IMNUT_HOST_RELEASE : IMNUT_HOST_DEV;
+    const url = `https://${host}/api/v1/imnut/bind/status?key=${encodeURIComponent(key)}`;
+    const response = await fetchJsonWithTimeout<any>(url, {}, CONNECTIVITY_TIMEOUT_MS);
+    const data = (response?.data || response) as ImnutBindStatusPayload;
+    if (data.status === 'bound' && data.conv_id && data.cid && data.token) {
+      return {
+        status: 'bound',
+        convId: data.conv_id,
+        cid: data.cid,
+        token: data.token,
+      };
+    }
+    return { status: 'pending' };
   }
 }

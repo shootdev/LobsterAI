@@ -1705,6 +1705,22 @@ if (!gotTheLock) {
     }
   });
 
+  ipcMain.handle('im:imnut:bindStatus', async (
+    _event,
+    key: string,
+    environment: 'dev' | 'release'
+  ) => {
+    try {
+      const result = await getIMGatewayManager().getImnutBindStatus(key, environment);
+      return { success: true, result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to poll IMNut bind status',
+      };
+    }
+  });
+
   ipcMain.handle('generate-session-title', async (_event, userInput: string | null) => {
     return generateSessionTitle(userInput);
   });

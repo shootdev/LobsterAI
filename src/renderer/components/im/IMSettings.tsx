@@ -43,6 +43,10 @@ const IMSettings: React.FC = () => {
   const [testingPlatform, setTestingPlatform] = useState<IMPlatform | null>(null);
   const [connectivityResults, setConnectivityResults] = useState<Partial<Record<IMPlatform, IMConnectivityTestResult>>>({});
   const [connectivityModalPlatform, setConnectivityModalPlatform] = useState<IMPlatform | null>(null);
+  const [imnutBindModalOpen, setImnutBindModalOpen] = useState(false);
+  const [imnutBindKey, setImnutBindKey] = useState('');
+  const [imnutBindStatus, setImnutBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
+  const [imnutBindError, setImnutBindError] = useState('');
   const [language, setLanguage] = useState<'zh' | 'en'>(i18nService.getLanguage());
   const [allowedUserIdInput, setAllowedUserIdInput] = useState('');
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -112,6 +116,14 @@ const IMSettings: React.FC = () => {
         environment,
       },
     });
+  };
+
+  const handleStartImnutBind = () => {
+    const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+    setImnutBindKey(key);
+    setImnutBindStatus('pending');
+    setImnutBindError('');
+    setImnutBindModalOpen(true);
   };
 
   // Save config on blur (only save current platform to avoid overwriting other platforms with defaults)
@@ -256,6 +268,52 @@ const IMSettings: React.FC = () => {
       [platform]: config[platform],
     } as Partial<IMGatewayConfig>);
   };
+
+  useEffect(() => {
+    if (!imnutBindModalOpen || !imnutBindKey) {
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const result = await window.electron.im.getImnutBindStatus(imnutBindKey, config.imnut.environment);
+        if (cancelled) return;
+        if (!result.success || !result.result) {
+          if (result.error) {
+            setImnutBindError(result.error);
+            setImnutBindStatus('error');
+          }
+          return;
+        }
+        if (result.result.status === 'bound' && result.result.convId && result.result.cid && result.result.token) {
+          const nextConfig = {
+            ...config.imnut,
+            convId: result.result.convId,
+            senderCid: result.result.cid,
+            wsToken: result.result.token,
+          };
+          dispatch(setImnutConfig(nextConfig));
+          await imService.updateConfig({ imnut: nextConfig });
+          setImnutBindStatus('bound');
+        } else {
+          setImnutBindStatus('pending');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setImnutBindError(error instanceof Error ? error.message : 'Bind polling failed');
+          setImnutBindStatus('error');
+        }
+      }
+    };
+    void poll();
+    const timer = setInterval(() => {
+      void poll();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [imnutBindModalOpen, imnutBindKey, config.imnut.environment, config.imnut, dispatch]);
 
   // Handle platform toggle
   const handlePlatformToggle = (platform: IMPlatform) => {
@@ -824,6 +882,16 @@ const IMSettings: React.FC = () => {
                 : 'Current host: test.im.qzhuli.com'}
             </p>
 
+            <div>
+              <button
+                type="button"
+                onClick={handleStartImnutBind}
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors active:scale-[0.98]"
+              >
+                Bind via QR
+              </button>
+            </div>
+
             <div className="pt-1">
               {renderConnectivityTestButton('imnut')}
             </div>
@@ -918,6 +986,53 @@ const IMSettings: React.FC = () => {
 
               <div className="px-4 py-3 border-t dark:border-claude-darkBorder border-claude-border flex items-center justify-end">
                 {renderConnectivityTestButton(connectivityModalPlatform)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {imnutBindModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            onClick={() => setImnutBindModalOpen(false)}
+          >
+            <div
+              className="w-full max-w-md dark:bg-claude-darkSurface bg-claude-surface rounded-2xl shadow-modal border dark:border-claude-darkBorder border-claude-border overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-3 border-b dark:border-claude-darkBorder border-claude-border flex items-center justify-between">
+                <div className="text-sm font-semibold dark:text-claude-darkText text-claude-text">
+                  IMNut QR Bind
+                </div>
+                <button
+                  type="button"
+                  aria-label={i18nService.t('close')}
+                  onClick={() => setImnutBindModalOpen(false)}
+                  className="p-1 rounded-md dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover dark:text-claude-darkTextSecondary text-claude-textSecondary"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-4 space-y-3">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: imnutBindKey }))}`}
+                  alt="IMNut bind QR"
+                  className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
+                />
+                <div className="text-[11px] break-all dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                  key: {imnutBindKey}
+                </div>
+                <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                  status: {imnutBindStatus}
+                </div>
+                {imnutBindError && (
+                  <div className="text-xs text-red-500 bg-red-500/10 px-2 py-1.5 rounded-lg">{imnutBindError}</div>
+                )}
+                {imnutBindStatus === 'bound' && (
+                  <div className="text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1.5 rounded-lg">
+                    Bound successfully. Credentials are filled automatically.
+                  </div>
+                )}
               </div>
             </div>
           </div>

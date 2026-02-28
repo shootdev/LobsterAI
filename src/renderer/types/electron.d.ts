@@ -324,6 +324,14 @@ interface IElectronAPI {
       configOverride?: Partial<IMGatewayConfig>
     ) => Promise<{ success: boolean; result?: IMConnectivityTestResult; error?: string }>;
     getStatus: () => Promise<{ success: boolean; status?: IMGatewayStatus; error?: string }>;
+    getImnutBindStatus: (
+      key: string,
+      environment: 'dev' | 'release'
+    ) => Promise<{
+      success: boolean;
+      result?: { status: 'pending' | 'bound'; convId?: string; cid?: string; token?: string };
+      error?: string;
+    }>;
     onStatusChange: (callback: (status: IMGatewayStatus) => void) => () => void;
     onMessageReceived: (callback: (message: IMMessage) => void) => () => void;
   };

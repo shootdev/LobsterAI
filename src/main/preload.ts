@@ -262,6 +262,8 @@ contextBridge.exposeInMainWorld('electron', {
 
     // Status
     getStatus: () => ipcRenderer.invoke('im:status:get'),
+    getImnutBindStatus: (key: string, environment: 'dev' | 'release') =>
+      ipcRenderer.invoke('im:imnut:bindStatus', key, environment),
 
     // Event listeners
     onStatusChange: (callback: (status: any) => void) => {
