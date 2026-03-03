@@ -11,6 +11,9 @@ import {
   DEFAULT_IMNUT_STATUS,
 } from './types';
 
+/** Header name expected by ServeWssOpenClaw when OpenClawWSToken is configured. */
+const OPENCLAW_TOKEN_HEADER = 'X-OpenClaw-Token';
+
 const DEFAULT_IMNUT_HOST_DEV = 'test.im.qzhuli.com';
 const DEFAULT_IMNUT_HOST_RELEASE = 'im.qzhuli.com';
 const DEFAULT_PUSH_PATH = '/api/v1/conversations/push_message';
@@ -27,15 +30,25 @@ function getImnutBaseUrl(config: ImnutConfig): string {
   return `https://${resolveImnutHost(config)}`;
 }
 
+/**
+ * Builds the full WebSocket URL for the /wss_openclaw endpoint.
+ *
+ * ServeWssOpenClaw (server.go) requires all three query params:
+ *   ?cid=<senderCid>&token=<wsToken>&conv_id=<convId>
+ *
+ * The server validates:
+ *  1. cid + token are present (401 if missing)
+ *  2. conv_id is present (400 if missing)
+ *  3. token matches the stored DB token for cid (401 if mismatch)
+ *  4. Optionally, X-OpenClaw-Token header matches OpenClawWSToken config
+ */
 function getImnutWsUrl(config: ImnutConfig): string {
-  return `wss://${resolveImnutHost(config)}${DEFAULT_WS_URL_PATH}`;
-}
-
-function addTokenQuery(url: string, token?: string): string {
-  const value = (token || '').trim();
-  if (!value) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(value)}`;
+  const base = `wss://${resolveImnutHost(config)}${DEFAULT_WS_URL_PATH}`;
+  const params = new URLSearchParams();
+  params.set('cid', config.senderCid.trim());
+  params.set('token', config.wsToken.trim());
+  params.set('conv_id', config.convId.trim());
+  return `${base}?${params.toString()}`;
 }
 
 export class ImnutGateway extends EventEmitter {
@@ -96,7 +109,7 @@ export class ImnutGateway extends EventEmitter {
       throw new Error('WebSocket is not available in current runtime');
     }
 
-    const wsUrl = addTokenQuery(getImnutWsUrl(config), config.wsToken);
+    const wsUrl = getImnutWsUrl(config);
     this.log('[IMNut Gateway] Starting websocket bridge:', wsUrl);
 
     this.status = {
@@ -109,7 +122,13 @@ export class ImnutGateway extends EventEmitter {
     this.emit('status');
 
     await new Promise<void>((resolve, reject) => {
-      this.ws = new WSImpl(wsUrl);
+      // Pass X-OpenClaw-Token via the WebSocket subprotocol list when present.
+      // Browser/Node WebSocket APIs do not allow arbitrary upgrade headers;
+      // the server must accept this convention when openClawToken is set.
+      const protocols: string[] = config.openClawToken
+        ? [`${OPENCLAW_TOKEN_HEADER}.${config.openClawToken.trim()}`]
+        : [];
+      this.ws = protocols.length ? new WSImpl(wsUrl, protocols) : new WSImpl(wsUrl);
       let settled = false;
 
       this.ws.onopen = () => {
