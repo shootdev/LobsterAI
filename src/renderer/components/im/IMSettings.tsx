@@ -3,7 +3,7 @@
  * Configuration UI for all IM bot channels
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { RootState } from '../../store';
@@ -47,6 +47,7 @@ const IMSettings: React.FC = () => {
   const [imnutBindKey, setImnutBindKey] = useState('');
   const [imnutBindStatus, setImnutBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
   const [imnutBindError, setImnutBindError] = useState('');
+  const hasAutoOpenedQzhuliBindRef = useRef(false);
   const [language, setLanguage] = useState<'zh' | 'en'>(i18nService.getLanguage());
   const [allowedUserIdInput, setAllowedUserIdInput] = useState('');
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -125,6 +126,22 @@ const IMSettings: React.FC = () => {
     setImnutBindError('');
     setImnutBindModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!configLoaded || hasAutoOpenedQzhuliBindRef.current) {
+      return;
+    }
+    if (config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken) {
+      return;
+    }
+    hasAutoOpenedQzhuliBindRef.current = true;
+    setActivePlatform('imnut');
+    const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+    setImnutBindKey(key);
+    setImnutBindStatus('pending');
+    setImnutBindError('');
+    setImnutBindModalOpen(true);
+  }, [configLoaded, config.imnut.senderCid, config.imnut.convId, config.imnut.wsToken]);
 
   // Save config on blur (only save current platform to avoid overwriting other platforms with defaults)
   const handleSaveConfig = async () => {
