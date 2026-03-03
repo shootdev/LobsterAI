@@ -31,6 +31,8 @@ const CONNECTIVITY_TIMEOUT_MS = 10_000;
 const INBOUND_ACTIVITY_WARN_AFTER_MS = 2 * 60 * 1000;
 const IMNUT_HOST_DEV = 'test.im.qzhuli.com';
 const IMNUT_HOST_RELEASE = 'im.qzhuli.com';
+const QZHULI_CLIENT_HOST_DEV = 'test.client.qzhuli.com';
+const QZHULI_CLIENT_HOST_RELEASE = 'client.qzhuli.com';
 
 interface TelegramGetMeResponse {
   ok?: boolean;
@@ -46,10 +48,12 @@ interface DiscordUserResponse {
 }
 
 interface ImnutBindStatusPayload {
-  status?: 'pending' | 'bound';
+  status?: 0 | 1;
   conv_id?: string;
+  conversation_id?: string;
   cid?: string;
   token?: string;
+  bind_token?: string;
 }
 
 export interface IMGatewayManagerOptions {
@@ -1074,18 +1078,25 @@ export class IMGatewayManager extends EventEmitter {
     key: string,
     environment: 'dev' | 'release'
   ): Promise<{ status: 'pending' | 'bound'; convId?: string; cid?: string; token?: string }> {
-    const host = environment === 'release' ? IMNUT_HOST_RELEASE : IMNUT_HOST_DEV;
-    const url = `https://${host}/api/v1/imnut/bind/status?key=${encodeURIComponent(key)}`;
+    console.info('[IMGatewayManager] Polling IMNut bind status', { environment });
+    const host = environment === 'release' ? QZHULI_CLIENT_HOST_RELEASE : QZHULI_CLIENT_HOST_DEV;
+    const url = `https://${host}/aimachine/check_bind_status?bind_key=${encodeURIComponent(key)}`;
     const response = await fetchJsonWithTimeout<any>(url, {}, CONNECTIVITY_TIMEOUT_MS);
     const data = (response?.data || response) as ImnutBindStatusPayload;
-    if (data.status === 'bound' && data.conv_id && data.cid && data.token) {
+
+    const convId = data.conv_id || data.conversation_id;
+    const token = data.token || data.bind_token;
+
+    if (data.status === 1 && convId && data.cid && token) {
+      console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'bound' });
       return {
         status: 'bound',
-        convId: data.conv_id,
+        convId,
         cid: data.cid,
-        token: data.token,
+        token,
       };
     }
+    console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'pending' });
     return { status: 'pending' };
   }
 }

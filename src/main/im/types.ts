@@ -149,6 +149,9 @@ export interface ImnutConfig {
   convId: string;
   senderCid: string;
   wsToken: string;
+  /** Optional. Sent as X-OpenClaw-Token header (via WS subprotocol) when the
+   *  server has OpenClawWSToken configured. */
+  openClawToken?: string;
   reconnectMs: number;
   maxReconnectMs: number;
   maxReconnectAttempts: number;

@@ -1015,7 +1015,7 @@ const IMSettings: React.FC = () => {
               </div>
               <div className="p-4 space-y-3">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: imnutBindKey }))}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: imnutBindKey, id: 2 }))}`}
                   alt="IMNut bind QR"
                   className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
                 />
