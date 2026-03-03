@@ -338,6 +338,7 @@ const IMSettings: React.FC = () => {
           dispatch(setImnutConfig(nextConfig));
           await imService.updateConfig({ imnut: nextConfig });
           setImnutBindStatus('bound');
+          setImnutBindModalOpen(false);
         } else {
           setImnutBindStatus('pending');
         }
@@ -351,7 +352,7 @@ const IMSettings: React.FC = () => {
     void poll();
     const timer = setInterval(() => {
       void poll();
-    }, 2000);
+    }, 5000);
     return () => {
       cancelled = true;
       clearInterval(timer);
