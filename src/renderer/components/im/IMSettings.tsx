@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import QRCode from 'qrcode';
 import { RootState } from '../../store';
 import { imService } from '../../services/im';
 import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, setImnutConfig, clearError } from '../../store/slices/imSlice';
@@ -45,6 +46,7 @@ const IMSettings: React.FC = () => {
   const [connectivityModalPlatform, setConnectivityModalPlatform] = useState<IMPlatform | null>(null);
   const [imnutBindModalOpen, setImnutBindModalOpen] = useState(false);
   const [imnutBindKey, setImnutBindKey] = useState('');
+  const [qzhuliBindQrDataUrl, setQzhuliBindQrDataUrl] = useState('');
   const [imnutBindStatus, setImnutBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
   const [imnutBindError, setImnutBindError] = useState('');
   const hasAutoOpenedQzhuliBindRef = useRef(false);
@@ -142,6 +144,30 @@ const IMSettings: React.FC = () => {
     setImnutBindError('');
     setImnutBindModalOpen(true);
   }, [configLoaded, config.imnut.senderCid, config.imnut.convId, config.imnut.wsToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!imnutBindModalOpen || !imnutBindKey) {
+      setQzhuliBindQrDataUrl('');
+      return;
+    }
+    const payload = JSON.stringify({ type: 'imnut_bind', key: imnutBindKey, id: 2 });
+    void QRCode.toDataURL(payload, { width: 220, margin: 1 })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setQzhuliBindQrDataUrl(dataUrl);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setQzhuliBindQrDataUrl('');
+          console.warn('[IMSettings] Failed to generate QZhuli QR code:', error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [imnutBindModalOpen, imnutBindKey]);
 
   // Save config on blur (only save current platform to avoid overwriting other platforms with defaults)
   const handleSaveConfig = async () => {
@@ -1031,11 +1057,15 @@ const IMSettings: React.FC = () => {
                 </button>
               </div>
               <div className="p-4 space-y-3">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: imnutBindKey, id: 2 }))}`}
-                  alt="QZhuli bind QR"
-                  className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
-                />
+                {qzhuliBindQrDataUrl ? (
+                  <img
+                    src={qzhuliBindQrDataUrl}
+                    alt="QZhuli bind QR"
+                    className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
+                  />
+                ) : (
+                  <div className="mx-auto h-[220px] w-[220px] rounded-md border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurfaceHover bg-claude-surfaceHover" />
+                )}
                 <div className="text-[11px] break-all dark:text-claude-darkTextSecondary text-claude-textSecondary">
                   key: {imnutBindKey}
                 </div>
