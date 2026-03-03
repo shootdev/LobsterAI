@@ -20,7 +20,7 @@ const platformMeta: Record<IMPlatform, { label: string; logo: string }> = {
   telegram: { label: 'Telegram', logo: 'telegram.svg' },
   discord: { label: 'Discord', logo: 'discord.svg' },
   nim: { label: '云信', logo: 'nim.png' },
-  imnut: { label: 'IMNut', logo: 'qzhuli.png' },
+  imnut: { label: 'QZhuli', logo: 'qzhuli.png' },
 };
 
 const verdictColorClass: Record<IMConnectivityTestResult['verdict'], string> = {
@@ -1002,7 +1002,7 @@ const IMSettings: React.FC = () => {
             >
               <div className="px-4 py-3 border-b dark:border-claude-darkBorder border-claude-border flex items-center justify-between">
                 <div className="text-sm font-semibold dark:text-claude-darkText text-claude-text">
-                  IMNut QR Bind
+                  QZhuli QR Bind
                 </div>
                 <button
                   type="button"
@@ -1016,7 +1016,7 @@ const IMSettings: React.FC = () => {
               <div className="p-4 space-y-3">
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: imnutBindKey, id: 2 }))}`}
-                  alt="IMNut bind QR"
+                  alt="QZhuli bind QR"
                   className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
                 />
                 <div className="text-[11px] break-all dark:text-claude-darkTextSecondary text-claude-textSecondary">
