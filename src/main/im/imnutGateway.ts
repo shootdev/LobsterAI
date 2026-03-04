@@ -18,7 +18,7 @@ const DEFAULT_IMNUT_HOST_DEV = 'test.im.qzhuli.com';
 const DEFAULT_IMNUT_HOST_RELEASE = 'im.qzhuli.com';
 const DEFAULT_PUSH_PATH = '/api/v1/conversations/push_message';
 const DEFAULT_WS_URL_PATH = '/wss_openclaw';
-const DEFAULT_MSG_TYPE = 11;
+const DEFAULT_MSG_TYPE = 1;
 const DEFAULT_RECONNECT_MS = 2_000;
 const DEFAULT_MAX_RECONNECT_MS = 30_000;
 
