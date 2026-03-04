@@ -988,6 +988,11 @@ if (!gotTheLock) {
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getSystemLocale', () => app.getLocale());
+  ipcMain.handle('app:quit', () => {
+    isQuitting = true;
+    app.quit();
+    return { success: true };
+  });
 
   // Skills IPC handlers
   ipcMain.handle('skills:list', () => {

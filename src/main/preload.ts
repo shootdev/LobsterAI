@@ -232,6 +232,7 @@ contextBridge.exposeInMainWorld('electron', {
   appInfo: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getSystemLocale: () => ipcRenderer.invoke('app:getSystemLocale'),
+    quit: () => ipcRenderer.invoke('app:quit'),
   },
   appUpdate: {
     download: (url: string) => ipcRenderer.invoke('appUpdate:download', url),

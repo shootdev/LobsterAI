@@ -129,6 +129,14 @@ const IMSettings: React.FC = () => {
     setImnutBindModalOpen(true);
   };
 
+  const handleCloseImnutBindModal = () => {
+    setImnutBindModalOpen(false);
+    const hasImnutConfig = !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
+    if (imnutBindStatus !== 'bound' && !hasImnutConfig) {
+      void window.electron.appInfo.quit();
+    }
+  };
+
   useEffect(() => {
     if (!configLoaded || hasAutoOpenedQzhuliBindRef.current) {
       return;
@@ -1038,7 +1046,7 @@ const IMSettings: React.FC = () => {
         {imnutBindModalOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setImnutBindModalOpen(false)}
+            onClick={handleCloseImnutBindModal}
           >
             <div
               className="w-full max-w-md dark:bg-claude-darkSurface bg-claude-surface rounded-2xl shadow-modal border dark:border-claude-darkBorder border-claude-border overflow-hidden"
@@ -1046,12 +1054,11 @@ const IMSettings: React.FC = () => {
             >
               <div className="px-4 py-3 border-b dark:border-claude-darkBorder border-claude-border flex items-center justify-between">
                 <div className="text-sm font-semibold dark:text-claude-darkText text-claude-text">
-                  QZhuli QR Bind
                 </div>
                 <button
                   type="button"
                   aria-label={i18nService.t('close')}
-                  onClick={() => setImnutBindModalOpen(false)}
+                  onClick={handleCloseImnutBindModal}
                   className="p-1 rounded-md dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover dark:text-claude-darkTextSecondary text-claude-textSecondary"
                 >
                   <XMarkIcon className="h-4 w-4" />
@@ -1067,11 +1074,8 @@ const IMSettings: React.FC = () => {
                 ) : (
                   <div className="mx-auto h-[220px] w-[220px] rounded-md border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurfaceHover bg-claude-surfaceHover" />
                 )}
-                <div className="text-[11px] break-all dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                  key: {imnutBindKey}
-                </div>
-                <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                  status: {imnutBindStatus}
+                <div className="text-sm text-center dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                  用Q助理扫一扫
                 </div>
                 {imnutBindError && (
                   <div className="text-xs text-red-500 bg-red-500/10 px-2 py-1.5 rounded-lg">{imnutBindError}</div>
