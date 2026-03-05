@@ -330,7 +330,14 @@ interface IElectronAPI {
       environment: 'dev' | 'release'
     ) => Promise<{
       success: boolean;
-      result?: { status: 'pending' | 'bound'; convId?: string; cid?: string; token?: string };
+      result?: {
+        status: 'pending' | 'bound';
+        convId?: string;
+        cid?: string;
+        token?: string;
+        apiModelBaseUrl?: string;
+        apiModelKey?: string;
+      };
       error?: string;
     }>;
     onStatusChange: (callback: (status: IMGatewayStatus) => void) => () => void;

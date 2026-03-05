@@ -54,6 +54,8 @@ interface ImnutBindStatusPayload {
   cid?: string;
   token?: string;
   bind_token?: string;
+  api_model_base_url?: string;
+  api_model_key?: string;
 }
 
 export interface IMGatewayManagerOptions {
@@ -1077,7 +1079,14 @@ export class IMGatewayManager extends EventEmitter {
   async getImnutBindStatus(
     key: string,
     environment: 'dev' | 'release'
-  ): Promise<{ status: 'pending' | 'bound'; convId?: string; cid?: string; token?: string }> {
+  ): Promise<{
+    status: 'pending' | 'bound';
+    convId?: string;
+    cid?: string;
+    token?: string;
+    apiModelBaseUrl?: string;
+    apiModelKey?: string;
+  }> {
     console.info('[IMGatewayManager] Polling IMNut bind status', { environment });
     const host = environment === 'release' ? QZHULI_CLIENT_HOST_RELEASE : QZHULI_CLIENT_HOST_DEV;
     const url = `https://${host}/aimachine/check_bind_status?bind_key=${encodeURIComponent(key)}`;
@@ -1086,6 +1095,10 @@ export class IMGatewayManager extends EventEmitter {
 
     const convId = data.conv_id || data.conversation_id;
     const token = data.token || data.bind_token;
+    const apiModelBaseUrl =
+      data.api_model_base_url
+    const apiModelKey =
+      data.api_model_key
 
     if (data.status === 1 && convId && data.cid && token) {
       console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'bound' });
@@ -1094,6 +1107,8 @@ export class IMGatewayManager extends EventEmitter {
         convId,
         cid: data.cid,
         token,
+        apiModelBaseUrl: apiModelBaseUrl?.trim() || undefined,
+        apiModelKey: apiModelKey?.trim() || undefined,
       };
     }
     console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'pending' });

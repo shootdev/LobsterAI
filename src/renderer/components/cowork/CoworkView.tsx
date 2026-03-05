@@ -80,7 +80,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         const apiConfig = await coworkService.checkApiConfig();
         if (apiConfig && !apiConfig.hasConfig) {
           onRequestAppSettings?.({
-            initialTab: 'model',
+            initialTab: 'im',
             notice: buildApiConfigNotice(apiConfig.error),
           });
         }

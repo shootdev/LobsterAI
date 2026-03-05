@@ -1,9 +1,9 @@
 const UPDATE_CHECK_URL = import.meta.env.DEV
-  ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/update'
-  : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/update';
+  ? 'https://client.qzhuli.com/sys/lobsterai_update_config'
+  : 'https://test.client.qzhuli.com/sys/lobsterai_update_config';
 const FALLBACK_DOWNLOAD_URL = import.meta.env.DEV
-  ? 'https://lobsterai.inner.youdao.com/#/download-list'
-  : 'https://lobsterai.youdao.com/#/download-list';
+  ? ''
+  : '';
 
 export const UPDATE_POLL_INTERVAL_MS = 12 * 60 * 60 * 1000;
 

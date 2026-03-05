@@ -620,6 +620,21 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
             ...prev,  // 保留默认的 providers（包括新添加的 anthropic）
             ...config.providers,  // 覆盖已保存的配置
           };
+          // 自定义供应商：若用户未配置（apiKey/baseUrl 为空），则用默认配置填充，保证设置里始终显示预置的自定义模型
+          const defaultCustom = defaultConfig.providers?.custom;
+          if (defaultCustom && merged.custom) {
+            const custom = merged.custom as ProviderConfig;
+            const isEmpty = !(custom.apiKey?.trim()) && !(custom.baseUrl?.trim());
+            if (isEmpty) {
+              merged.custom = {
+                ...defaultCustom,
+                ...custom,
+                apiKey: defaultCustom.apiKey,
+                baseUrl: defaultCustom.baseUrl,
+                models: (defaultCustom.models?.length ? defaultCustom.models : custom.models) ?? [],
+              } as ProviderConfig;
+            }
+          }
           return Object.fromEntries(
             Object.entries(merged).map(([providerKey, providerConfig]) => {
               const models = providerConfig.models?.map(model => ({
@@ -2608,7 +2623,19 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
         );
 
       case 'im':
-        return <IMSettings />;
+        return (
+          <IMSettings
+            onCustomProviderSynced={(customProvider) => {
+              setProviders((prev) => ({
+                ...prev,
+                custom: {
+                  ...prev.custom,
+                  ...customProvider,
+                },
+              }));
+            }}
+          />
+        );
 
       case 'about':
         return (

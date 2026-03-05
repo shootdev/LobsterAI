@@ -350,7 +350,10 @@ export const defaultConfig: AppConfig = {
       apiKey: '',
       baseUrl: '',
       apiFormat: 'openai',
-      models: []
+      models: [ 
+        { id: 'qwen3.5-plus', name: 'Qwen3.5 Plus', supportsImage: true },
+        { id: 'qwen3-coder-plus', name: 'Qwen3 Coder Plus', supportsImage: false }
+      ]
     }
   },
   theme: 'system',

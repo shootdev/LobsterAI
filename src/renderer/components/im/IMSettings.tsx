@@ -9,6 +9,8 @@ import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangl
 import QRCode from 'qrcode';
 import { RootState } from '../../store';
 import { imService } from '../../services/im';
+import { configService } from '../../services/config';
+import { defaultConfig, type AppConfig } from '../../config';
 import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, setImnutConfig, clearError } from '../../store/slices/imSlice';
 import { i18nService } from '../../services/i18n';
 import type { IMPlatform, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig } from '../../types/im';
@@ -37,7 +39,11 @@ const checkLevelColorClass: Record<IMConnectivityCheck['level'], string> = {
   fail: 'text-red-600 dark:text-red-400',
 };
 
-const IMSettings: React.FC = () => {
+type IMSettingsProps = {
+  onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
+};
+
+const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
   const dispatch = useDispatch();
   const { config, status, isLoading } = useSelector((state: RootState) => state.im);
   const [activePlatform, setActivePlatform] = useState<IMPlatform>('dingtalk');
@@ -129,12 +135,29 @@ const IMSettings: React.FC = () => {
     setImnutBindModalOpen(true);
   };
 
-  const handleCloseImnutBindModal = () => {
+  const handleCloseImnutBindModal = async () => {
     setImnutBindModalOpen(false);
+    if (imnutBindKey) {
+      try {
+        const result = await window.electron.im.getImnutBindStatus(imnutBindKey, config.imnut.environment);
+        if (result.success && result.result) {
+          const apiModelBaseUrl = result.result.apiModelBaseUrl;
+          const apiModelKey = result.result.apiModelKey;
+          await applyImnutModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
+        } else if (result.error) {
+          console.warn('[IMSettings] Closing bind modal, final bind-status poll failed', result.error);
+        }
+      } catch (error) {
+        console.warn('[IMSettings] Closing bind modal, final bind-status poll threw error', error);
+      }
+    }
     const hasImnutConfig = !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
     if (imnutBindStatus !== 'bound' && !hasImnutConfig) {
+      console.info('[IMSettings] IMNut bind modal closed without bound config, quitting app');
       void window.electron.appInfo.quit();
+      return;
     }
+    console.info('[IMSettings] IMNut bind modal close completed');
   };
 
   useEffect(() => {
@@ -181,6 +204,49 @@ const IMSettings: React.FC = () => {
   const handleSaveConfig = async () => {
     if (!configLoaded) return;
     await imService.updateConfig({ [activePlatform]: config[activePlatform] });
+  };
+
+  const applyImnutModelConfigToCustomProvider = async (apiModelBaseUrl?: string, apiModelKey?: string) => {
+    const nextBaseUrl = apiModelBaseUrl?.trim();
+    const nextApiKey = apiModelKey?.trim();
+    const maskedApiKey = nextApiKey ? `***${nextApiKey.slice(-4)}` : undefined;
+    if (!nextBaseUrl && !nextApiKey) {
+      console.info('[IMSettings] Skip custom provider sync: no api model config in bind status');
+      return;
+    }
+
+    const appConfig = configService.getConfig();
+    const providers = (appConfig.providers ?? defaultConfig.providers) as NonNullable<AppConfig['providers']>;
+    const customProvider = providers.custom;
+    const updatedProviders: NonNullable<AppConfig['providers']> = {
+      ...providers,
+      custom: {
+        ...customProvider,
+        enabled: true,
+        baseUrl: nextBaseUrl || customProvider.baseUrl,
+        apiKey: nextApiKey || customProvider.apiKey,
+      },
+    };
+
+    console.info('[IMSettings] Syncing IMNut model config to custom provider', {
+      baseUrl: nextBaseUrl || '(keep current)',
+      apiKey: maskedApiKey || '(keep current)',
+      enabled: true,
+    });
+    try {
+      await configService.updateConfig({
+        providers: updatedProviders,
+      });
+      onCustomProviderSynced?.({
+        enabled: updatedProviders.custom.enabled,
+        baseUrl: updatedProviders.custom.baseUrl,
+        apiKey: updatedProviders.custom.apiKey,
+      });
+      console.info('[IMSettings] Synced IMNut model config to custom provider');
+    } catch (error) {
+      console.error('[IMSettings] Failed to sync IMNut model config to custom provider', error);
+      throw error;
+    }
   };
 
   const getCheckTitle = (code: IMConnectivityCheck['code']): string => {
@@ -336,6 +402,10 @@ const IMSettings: React.FC = () => {
           }
           return;
         }
+        const compatResult = result.result as typeof result.result & { apiBaseUrl?: string; apiKey?: string };
+        const apiModelBaseUrl = result.result.apiModelBaseUrl ?? compatResult.apiBaseUrl;
+        const apiModelKey = result.result.apiModelKey ?? compatResult.apiKey;
+        await applyImnutModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
         if (result.result.status === 'bound' && result.result.convId && result.result.cid && result.result.token) {
           const nextConfig = {
             ...config.imnut,
