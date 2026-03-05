@@ -684,6 +684,27 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab !== 'model') {
+      return;
+    }
+    setProviders((prev) => {
+      const hasOtherEnabled = Object.entries(prev).some(
+        ([key, config]) => key !== 'custom' && config?.enabled
+      );
+      if (!hasOtherEnabled || !prev.custom?.enabled) {
+        return prev;
+      }
+      return {
+        ...prev,
+        custom: {
+          ...prev.custom,
+          enabled: false,
+        },
+      };
+    });
+  }, [activeTab]);
+
+  useEffect(() => {
     setNoticeMessage(notice ?? null);
   }, [notice]);
 
@@ -980,13 +1001,33 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
       return;
     }
 
-    setProviders(prev => ({
-      ...prev,
-      [provider]: {
-        ...prev[provider],
-        enabled: !prev[provider].enabled
+    setProviders(prev => {
+      const next = {
+        ...prev,
+        ...(isEnabling && provider !== 'custom'
+          ? {
+              custom: {
+                ...prev.custom,
+                enabled: false,
+              },
+            }
+          : {}),
+        [provider]: {
+          ...prev[provider],
+          enabled: !prev[provider].enabled,
+        },
+      };
+
+      const hasEnabledProvider = Object.values(next).some((cfg) => cfg.enabled);
+      if (!hasEnabledProvider) {
+        next.custom = {
+          ...next.custom,
+          enabled: true,
+        };
       }
-    }));
+
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
