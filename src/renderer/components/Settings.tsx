@@ -184,42 +184,6 @@ const normalizeBaseUrl = (baseUrl: string): string => baseUrl.trim().replace(/\/
 const normalizeApiFormat = (value: unknown): 'anthropic' | 'openai' => (
   value === 'openai' ? 'openai' : 'anthropic'
 );
-const ABOUT_CONTACT_EMAIL = 'lobsterai.project@rd.netease.com';
-const ABOUT_USER_MANUAL_URL = 'https://lobsterai.youdao.com/#/docs/lobsterai_user_manual';
-
-const copyTextFallback = (text: string): boolean => {
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  textarea.style.pointerEvents = 'none';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  textarea.setSelectionRange(0, text.length);
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
-  return copied;
-};
-
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (clipboardError) {
-      console.warn('Navigator clipboard write failed, trying fallback:', clipboardError);
-    }
-  }
-
-  try {
-    return copyTextFallback(text);
-  } catch (fallbackError) {
-    console.error('Fallback clipboard copy failed:', fallbackError);
-    return false;
-  }
-};
 
 const getFixedApiFormatForProvider = (provider: string): 'anthropic' | 'openai' | null => {
   if (provider === 'openai' || provider === 'gemini') {
@@ -364,12 +328,11 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
 
   // Add state for providers configuration
   const [providers, setProviders] = useState<ProvidersConfig>(() => getDefaultProviders());
-  
+
   // 创建引用来确保内容区域的滚动
   const contentRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const emailCopiedTimerRef = useRef<number | null>(null);
-  
+
   // 快捷键设置
   const [shortcuts, setShortcuts] = useState({
     newChat: 'Ctrl+N',
@@ -388,28 +351,9 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
 
   // About tab
   const [appVersion, setAppVersion] = useState('');
-  const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
     window.electron.appInfo.getVersion().then(setAppVersion);
-  }, []);
-
-  const handleCopyContactEmail = useCallback(async () => {
-    const copied = await copyTextToClipboard(ABOUT_CONTACT_EMAIL);
-    if (copied) {
-      setEmailCopied(true);
-      if (emailCopiedTimerRef.current != null) {
-        window.clearTimeout(emailCopiedTimerRef.current);
-      }
-      emailCopiedTimerRef.current = window.setTimeout(() => {
-        setEmailCopied(false);
-        emailCopiedTimerRef.current = null;
-      }, 1200);
-    }
-  }, []);
-
-  const handleOpenUserManual = useCallback(() => {
-    void window.electron.shell.openExternal(ABOUT_USER_MANUAL_URL);
   }, []);
 
   const coworkConfig = useSelector((state: RootState) => state.cowork.config);
@@ -439,12 +383,6 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
     coworkConfig.memoryEnabled,
     coworkConfig.memoryLlmJudgeEnabled,
   ]);
-
-  useEffect(() => () => {
-    if (emailCopiedTimerRef.current != null) {
-      window.clearTimeout(emailCopiedTimerRef.current);
-    }
-  }, []);
 
   const loadCoworkSandboxStatus = useCallback(async () => {
     setCoworkSandboxLoading(true);
@@ -479,7 +417,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
   useEffect(() => {
     try {
       const config = configService.getConfig();
-      
+
       // Set general settings
       initialThemeRef.current = config.theme;
       initialLanguageRef.current = config.language;
@@ -493,7 +431,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
       }).catch(err => {
         console.error('Failed to load auto-launch setting:', err);
       });
-      
+
       // Set up providers based on saved config
       if (config.api) {
         // For backward compatibility with older config
@@ -611,7 +549,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
           }));
         }
       }
-      
+
       // Load provider-specific configurations if available
       // 合并已保存的配置和默认配置，确保新添加的 provider 能被显示
       if (config.providers) {
@@ -653,7 +591,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
           ) as ProvidersConfig;
         });
       }
-      
+
       // 加载快捷键设置
       if (config.shortcuts) {
         setShortcuts(prev => ({
@@ -1006,11 +944,11 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
         ...prev,
         ...(isEnabling && provider !== 'custom'
           ? {
-              custom: {
-                ...prev.custom,
-                enabled: false,
-              },
-            }
+            custom: {
+              ...prev.custom,
+              enabled: false,
+            },
+          }
           : {}),
         [provider]: {
           ...prev[provider],
@@ -1165,11 +1103,11 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
 
   const handleDeleteModel = (modelId: string) => {
     if (!providers[activeProvider].models) return;
-    
+
     const updatedModels = providers[activeProvider].models.filter(
       model => model.id !== modelId
     );
-    
+
     setProviders(prev => ({
       ...prev,
       [activeProvider]: {
@@ -1296,7 +1234,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
       // Apply Coding Plan endpoint switch
       let effectiveBaseUrl = providerConfig.baseUrl;
       let effectiveApiFormat = getEffectiveApiFormat(testingProvider, providerConfig.apiFormat);
-      
+
       // Handle Zhipu GLM Coding Plan endpoint switch
       if (testingProvider === 'zhipu' && (providerConfig as { codingPlanEnabled?: boolean }).codingPlanEnabled) {
         if (effectiveApiFormat === 'anthropic') {
@@ -1333,7 +1271,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
           effectiveApiFormat = 'openai';
         }
       }
-      
+
       const normalizedBaseUrl = effectiveBaseUrl.replace(/\/+$/, '');
       // 统一为两种协议格式：
       // - anthropic: /v1/messages
@@ -1372,14 +1310,14 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
         }
         const openAIRequestBody: Record<string, unknown> = useResponsesApi
           ? {
-              model: firstModel.id,
-              input: [{ role: 'user', content: [{ type: 'input_text', text: 'Hi' }] }],
-              max_output_tokens: CONNECTIVITY_TEST_TOKEN_BUDGET,
-            }
+            model: firstModel.id,
+            input: [{ role: 'user', content: [{ type: 'input_text', text: 'Hi' }] }],
+            max_output_tokens: CONNECTIVITY_TEST_TOKEN_BUDGET,
+          }
           : {
-              model: firstModel.id,
-              messages: [{ role: 'user', content: 'Hi' }],
-            };
+            model: firstModel.id,
+            messages: [{ role: 'user', content: 'Hi' }],
+          };
         if (!useResponsesApi && shouldUseMaxCompletionTokensForOpenAI(testingProvider, firstModel.id)) {
           openAIRequestBody.max_completion_tokens = CONNECTIVITY_TEST_TOKEN_BUDGET;
         } else {
@@ -1694,14 +1632,14 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
 
   // 渲染标签页
   const sidebarTabs: { key: TabType; label: string; icon: React.ReactNode }[] = useMemo(() => [
-    { key: 'general',        label: i18nService.t('general'),        icon: <Cog6ToothIcon className="h-5 w-5" /> },
-    { key: 'model',          label: i18nService.t('model'),          icon: <CubeIcon className="h-5 w-5" /> },
-    { key: 'im',             label: i18nService.t('imBot'),          icon: <ChatBubbleLeftIcon className="h-5 w-5" /> },
-    { key: 'email',          label: i18nService.t('emailTab'),       icon: <EnvelopeIcon className="h-5 w-5" /> },
-    { key: 'coworkMemory',   label: i18nService.t('coworkMemoryTitle'), icon: <BrainIcon className="h-5 w-5" /> },
-    { key: 'coworkSandbox',  label: i18nService.t('coworkSandbox'),  icon: <ShieldCheckIcon className="h-5 w-5" /> },
-    { key: 'shortcuts',      label: i18nService.t('shortcuts'),      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><rect x="2" y="4" width="20" height="14" rx="2" /><line x1="6" y1="8" x2="8" y2="8" /><line x1="10" y1="8" x2="12" y2="8" /><line x1="14" y1="8" x2="16" y2="8" /><line x1="6" y1="12" x2="8" y2="12" /><line x1="10" y1="12" x2="14" y2="12" /><line x1="16" y1="12" x2="18" y2="12" /><line x1="8" y1="15.5" x2="16" y2="15.5" /></svg> },
-    { key: 'about',          label: i18nService.t('about'),          icon: <InformationCircleIcon className="h-5 w-5" /> },
+    { key: 'general', label: i18nService.t('general'), icon: <Cog6ToothIcon className="h-5 w-5" /> },
+    { key: 'model', label: i18nService.t('model'), icon: <CubeIcon className="h-5 w-5" /> },
+    { key: 'im', label: i18nService.t('imBot'), icon: <ChatBubbleLeftIcon className="h-5 w-5" /> },
+    { key: 'email', label: i18nService.t('emailTab'), icon: <EnvelopeIcon className="h-5 w-5" /> },
+    { key: 'coworkMemory', label: i18nService.t('coworkMemoryTitle'), icon: <BrainIcon className="h-5 w-5" /> },
+    { key: 'coworkSandbox', label: i18nService.t('coworkSandbox'), icon: <ShieldCheckIcon className="h-5 w-5" /> },
+    { key: 'shortcuts', label: i18nService.t('shortcuts'), icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><rect x="2" y="4" width="20" height="14" rx="2" /><line x1="6" y1="8" x2="8" y2="8" /><line x1="10" y1="8" x2="12" y2="8" /><line x1="14" y1="8" x2="16" y2="8" /><line x1="6" y1="12" x2="8" y2="12" /><line x1="10" y1="12" x2="14" y2="12" /><line x1="16" y1="12" x2="18" y2="12" /><line x1="8" y1="15.5" x2="16" y2="15.5" /></svg> },
+    { key: 'about', label: i18nService.t('about'), icon: <InformationCircleIcon className="h-5 w-5" /> },
   ], [language]);
 
   const activeTabLabel = useMemo(() => {
@@ -1709,7 +1647,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
   }, [activeTab, sidebarTabs]);
 
   const renderTabContent = () => {
-    switch(activeTab) {
+    switch (activeTab) {
       case 'general':
         return (
           <div className="space-y-8">
@@ -1767,18 +1705,15 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                     }
                   }}
                   disabled={isUpdatingAutoLaunch}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                    isUpdatingAutoLaunch ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    autoLaunch
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${isUpdatingAutoLaunch ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${autoLaunch
                       ? 'bg-claude-accent'
                       : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
+                    }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      autoLaunch ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoLaunch ? 'translate-x-6' : 'translate-x-1'
+                      }`}
                   />
                 </button>
               </label>
@@ -1800,16 +1735,14 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   onClick={() => {
                     setUseSystemProxy((prev) => !prev);
                   }}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                    useSystemProxy
-                      ? 'bg-claude-accent'
-                      : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${useSystemProxy
+                    ? 'bg-claude-accent'
+                    : 'bg-gray-300 dark:bg-gray-600'
+                    }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      useSystemProxy ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${useSystemProxy ? 'translate-x-6' : 'translate-x-1'
+                      }`}
                   />
                 </button>
               </label>
@@ -1835,11 +1768,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                         setTheme(option.value);
                         themeService.setTheme(option.value);
                       }}
-                      className={`flex flex-col items-center rounded-xl border-2 p-3 transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'border-claude-accent bg-claude-accent/5 dark:bg-claude-accent/10'
-                          : 'dark:border-claude-darkBorder border-claude-border hover:border-claude-accent/50 dark:hover:border-claude-accent/50'
-                      }`}
+                      className={`flex flex-col items-center rounded-xl border-2 p-3 transition-colors cursor-pointer ${isSelected
+                        ? 'border-claude-accent bg-claude-accent/5 dark:bg-claude-accent/10'
+                        : 'dark:border-claude-darkBorder border-claude-border hover:border-claude-accent/50 dark:hover:border-claude-accent/50'
+                        }`}
                     >
                       <svg viewBox="0 0 120 80" className="w-full h-auto rounded-md mb-2 overflow-hidden" xmlns="http://www.w3.org/2000/svg">
                         {option.value === 'light' && (
@@ -1925,11 +1857,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                           </>
                         )}
                       </svg>
-                      <span className={`text-xs font-medium ${
-                        isSelected
-                          ? 'text-claude-accent'
-                          : 'dark:text-claude-darkText text-claude-text'
-                      }`}>
+                      <span className={`text-xs font-medium ${isSelected
+                        ? 'text-claude-accent'
+                        : 'dark:text-claude-darkText text-claude-text'
+                        }`}>
                         {option.label}
                       </span>
                     </button>
@@ -1972,11 +1903,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   return (
                     <label
                       key={option.value}
-                      className={`flex items-start gap-3 rounded-xl border px-3 py-2 text-sm transition-colors ${
-                        isDisabled
-                          ? 'cursor-not-allowed opacity-60 dark:border-claude-darkBorder border-claude-border'
-                          : 'cursor-pointer dark:border-claude-darkBorder border-claude-border hover:border-claude-accent'
-                      }`}
+                      className={`flex items-start gap-3 rounded-xl border px-3 py-2 text-sm transition-colors ${isDisabled
+                        ? 'cursor-not-allowed opacity-60 dark:border-claude-darkBorder border-claude-border'
+                        : 'cursor-pointer dark:border-claude-darkBorder border-claude-border hover:border-claude-accent'
+                        }`}
                     >
                       <input
                         type="radio"
@@ -2223,11 +2153,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   <div
                     key={provider}
                     onClick={() => handleProviderChange(providerKey)}
-                    className={`flex items-center p-2 rounded-xl cursor-pointer transition-colors ${
-                      activeProvider === provider
-                        ? 'bg-claude-accent/10 dark:bg-claude-accent/20 border border-claude-accent/30 shadow-subtle'
-                        : 'dark:bg-claude-darkSurface/50 bg-claude-surface hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover border border-transparent'
-                    }`}
+                    className={`flex items-center p-2 rounded-xl cursor-pointer transition-colors ${activeProvider === provider
+                      ? 'bg-claude-accent/10 dark:bg-claude-accent/20 border border-claude-accent/30 shadow-subtle'
+                      : 'dark:bg-claude-darkSurface/50 bg-claude-surface hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover border border-transparent'
+                      }`}
                   >
                     <div className="flex flex-1 items-center">
                       <div className="mr-2 flex h-7 w-7 items-center justify-center">
@@ -2235,22 +2164,19 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                           {providerInfo?.icon}
                         </span>
                       </div>
-                      <span className={`text-sm font-medium truncate ${
-                        activeProvider === provider
-                          ? 'text-claude-accent'
-                          : 'dark:text-claude-darkText text-claude-text'
-                      }`}>
+                      <span className={`text-sm font-medium truncate ${activeProvider === provider
+                        ? 'text-claude-accent'
+                        : 'dark:text-claude-darkText text-claude-text'
+                        }`}>
                         {providerInfo?.label ?? provider.charAt(0).toUpperCase() + provider.slice(1)}
                       </span>
                     </div>
                     <div className="flex items-center ml-2">
                       <div
                         title={!canToggleProvider ? i18nService.t('configureApiKey') : undefined}
-                        className={`w-7 h-4 rounded-full flex items-center transition-colors ${
-                          config.enabled ? 'bg-claude-accent' : 'dark:bg-claude-darkBorder bg-claude-border'
-                        } ${
-                          canToggleProvider ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                        }`}
+                        className={`w-7 h-4 rounded-full flex items-center transition-colors ${config.enabled ? 'bg-claude-accent' : 'dark:bg-claude-darkBorder bg-claude-border'
+                          } ${canToggleProvider ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                          }`}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (!canToggleProvider) {
@@ -2260,9 +2186,8 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                         }}
                       >
                         <div
-                          className={`w-3 h-3 rounded-full bg-white shadow-md transform transition-transform ${
-                            config.enabled ? 'translate-x-3.5' : 'translate-x-0.5'
-                          }`}
+                          className={`w-3 h-3 rounded-full bg-white shadow-md transform transition-transform ${config.enabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                            }`}
                         />
                       </div>
                     </div>
@@ -2278,11 +2203,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   {(providerMeta[activeProvider]?.label ?? activeProvider.charAt(0).toUpperCase() + activeProvider.slice(1))} {i18nService.t('providerSettings')}
                 </h3>
                 <div
-                  className={`px-2 py-0.5 rounded-lg text-xs font-medium ${
-                    providers[activeProvider].enabled
-                      ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                      : 'bg-red-500/20 text-red-600 dark:text-red-400'
-                  }`}
+                  className={`px-2 py-0.5 rounded-lg text-xs font-medium ${providers[activeProvider].enabled
+                    ? 'bg-green-500/20 text-green-600 dark:text-green-400'
+                    : 'bg-red-500/20 text-red-600 dark:text-red-400'
+                    }`}
                 >
                   {providers[activeProvider].enabled ? i18nService.t('providerStatusOn') : i18nService.t('providerStatusOff')}
                 </div>
@@ -2314,20 +2238,20 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   value={
                     activeProvider === 'zhipu' && providers.zhipu.codingPlanEnabled
                       ? (getEffectiveApiFormat('zhipu', providers.zhipu.apiFormat) === 'anthropic'
-                          ? 'https://open.bigmodel.cn/api/anthropic'
-                          : 'https://open.bigmodel.cn/api/coding/paas/v4')
+                        ? 'https://open.bigmodel.cn/api/anthropic'
+                        : 'https://open.bigmodel.cn/api/coding/paas/v4')
                       : activeProvider === 'qwen' && providers.qwen.codingPlanEnabled
                         ? (getEffectiveApiFormat('qwen', providers.qwen.apiFormat) === 'anthropic'
-                            ? 'https://coding.dashscope.aliyuncs.com/apps/anthropic'
-                            : 'https://coding.dashscope.aliyuncs.com/v1')
+                          ? 'https://coding.dashscope.aliyuncs.com/apps/anthropic'
+                          : 'https://coding.dashscope.aliyuncs.com/v1')
                         : activeProvider === 'volcengine' && providers.volcengine.codingPlanEnabled
                           ? (getEffectiveApiFormat('volcengine', providers.volcengine.apiFormat) === 'anthropic'
-                              ? 'https://ark.cn-beijing.volces.com/api/coding'
-                              : 'https://ark.cn-beijing.volces.com/api/coding/v3')
+                            ? 'https://ark.cn-beijing.volces.com/api/coding'
+                            : 'https://ark.cn-beijing.volces.com/api/coding/v3')
                           : activeProvider === 'moonshot' && providers.moonshot.codingPlanEnabled
                             ? (getEffectiveApiFormat('moonshot', providers.moonshot.apiFormat) === 'anthropic'
-                                ? 'https://api.kimi.com/coding'
-                                : 'https://api.kimi.com/coding/v1')
+                              ? 'https://api.kimi.com/coding'
+                              : 'https://api.kimi.com/coding/v1')
                             : providers[activeProvider].baseUrl
                   }
                   onChange={(e) => handleProviderConfigChange(activeProvider, 'baseUrl', e.target.value)}
@@ -2336,18 +2260,18 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                   placeholder={i18nService.t('baseUrlPlaceholder')}
                 />
                 {activeProvider === 'custom' && (
-                <div className="mt-1.5 space-y-0.5 text-[11px] text-claude-secondaryText dark:text-claude-darkSecondaryText">
-                  <p>
-                    <span className="text-sm text-claude-accent/50 mr-1">•</span>
-                    {i18nService.t('baseUrlHint1')}
-                    <code className="ml-1 text-claude-accent/80 dark:text-claude-accent/70 break-all">{i18nService.t('baseUrlHintExample1')}</code>
-                  </p>
-                  <p>
-                    <span className="text-sm text-claude-accent/50 mr-1">•</span>
-                    {i18nService.t('baseUrlHint2')}
-                    <code className="ml-1 text-claude-accent/80 dark:text-claude-accent/70 break-all">{i18nService.t('baseUrlHintExample2')}</code>
-                  </p>
-                </div>
+                  <div className="mt-1.5 space-y-0.5 text-[11px] text-claude-secondaryText dark:text-claude-darkSecondaryText">
+                    <p>
+                      <span className="text-sm text-claude-accent/50 mr-1">•</span>
+                      {i18nService.t('baseUrlHint1')}
+                      <code className="ml-1 text-claude-accent/80 dark:text-claude-accent/70 break-all">{i18nService.t('baseUrlHintExample1')}</code>
+                    </p>
+                    <p>
+                      <span className="text-sm text-claude-accent/50 mr-1">•</span>
+                      {i18nService.t('baseUrlHint2')}
+                      <code className="ml-1 text-claude-accent/80 dark:text-claude-accent/70 break-all">{i18nService.t('baseUrlHintExample2')}</code>
+                    </p>
+                  </div>
                 )}
                 {/* GLM Coding Plan 提示 */}
                 {activeProvider === 'zhipu' && providers.zhipu.codingPlanEnabled && (
@@ -2692,45 +2616,11 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                 <span className="text-sm dark:text-claude-darkText text-claude-text">{i18nService.t('aboutVersion')}</span>
                 <span className="text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary">{appVersion}</span>
               </div>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-claude-border dark:border-claude-darkBorder">
-                <span className="text-sm dark:text-claude-darkText text-claude-text">{i18nService.t('aboutContactEmail')}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleCopyContactEmail();
-                    }}
-                    title={i18nService.t('copyToClipboard')}
-                    className="text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary bg-transparent border-none appearance-none p-0 m-0 cursor-pointer focus:outline-none"
-                  >
-                    {ABOUT_CONTACT_EMAIL}
-                  </button>
-                  {emailCopied && (
-                    <span className="text-[11px] leading-4 text-emerald-600 dark:text-emerald-400">
-                      {language === 'zh' ? '已复制' : 'Copied'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm dark:text-claude-darkText text-claude-text">{i18nService.t('aboutUserManual')}</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenUserManual();
-                  }}
-                  className="text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary hover:text-claude-accent dark:hover:text-claude-accent bg-transparent border-none appearance-none px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded-md cursor-pointer focus:outline-none dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors"
-                >
-                  {ABOUT_USER_MANUAL_URL}
-                </button>
-              </div>
             </div>
 
             {/* Footer */}
             <p className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary mt-6">
-              &copy; {new Date().getFullYear()} NetEase Youdao
+              &copy; {new Date().getFullYear()}
             </p>
           </div>
         );
@@ -2759,11 +2649,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
               <button
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                  activeTab === tab.key
-                    ? 'bg-claude-accent/10 text-claude-accent'
-                    : 'dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:text-claude-darkText hover:text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover'
-                }`}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${activeTab === tab.key
+                  ? 'bg-claude-accent/10 text-claude-accent'
+                  : 'dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:text-claude-darkText hover:text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover'
+                  }`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
