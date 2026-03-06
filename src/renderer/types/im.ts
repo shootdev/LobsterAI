@@ -284,7 +284,7 @@ export const DEFAULT_NIM_CONFIG: NimConfig = {
 
 export const DEFAULT_IMNUT_CONFIG: ImnutConfig = {
   enabled: false,
-  environment: 'dev',
+  environment: 'release',
   convId: '',
   senderCid: '',
   wsToken: '',
