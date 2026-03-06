@@ -583,15 +583,15 @@ const downloadGithubArchive = async (
     archiveUrlCandidates.push(
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/refs/heads/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'LobsterAI Skill Downloader' },
+        headers: { 'User-Agent': 'Q助理电脑机器人 Skill Downloader' },
       },
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/refs/tags/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'LobsterAI Skill Downloader' },
+        headers: { 'User-Agent': 'Q助理电脑机器人 Skill Downloader' },
       },
       {
         url: `https://github.com/${source.owner}/${source.repo}/archive/${encodedRef}.zip`,
-        headers: { 'User-Agent': 'LobsterAI Skill Downloader' },
+        headers: { 'User-Agent': 'Q助理电脑机器人 Skill Downloader' },
       }
     );
   }
@@ -1009,14 +1009,14 @@ export class SkillManager {
               const archiveMessage = extractErrorMessage(archiveError);
               if (errno === 'ENOENT' && process.platform === 'win32') {
                 throw new Error(
-                  'Git executable not found. Please install Git for Windows or reinstall LobsterAI with bundled PortableGit.'
+                  'Git executable not found. Please install Git for Windows or reinstall Q助理电脑机器人 with bundled PortableGit.'
                   + ` Archive fallback also failed: ${archiveMessage}`
                 );
               }
               throw new Error(`Git clone failed: ${gitMessage}. Archive fallback failed: ${archiveMessage}`);
             }
           } else if (errno === 'ENOENT' && process.platform === 'win32') {
-            throw new Error('Git executable not found. Please install Git for Windows or reinstall LobsterAI with bundled PortableGit.');
+            throw new Error('Git executable not found. Please install Git for Windows or reinstall Q助理电脑机器人 with bundled PortableGit.');
           } else {
             throw error;
           }

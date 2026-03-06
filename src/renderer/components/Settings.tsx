@@ -2682,8 +2682,8 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
         return (
           <div className="flex flex-col items-center pt-6 pb-4">
             {/* Logo & App Name */}
-            <img src="logo.png" alt="LobsterAI" className="w-16 h-16 mb-3" />
-            <h3 className="text-lg font-semibold dark:text-claude-darkText text-claude-text">LobsterAI</h3>
+            <img src="logo.png" alt="Q助理电脑机器人" className="w-16 h-16 mb-3" />
+            <h3 className="text-lg font-semibold dark:text-claude-darkText text-claude-text">Q助理电脑机器人</h3>
             <span className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary mt-1">v{appVersion}</span>
 
             {/* Info Card */}

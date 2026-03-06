@@ -1,8 +1,8 @@
 {
-  "name": "lobsterai",
+  "name": "q-assistant-bot",
   "private": true,
   "license": "MIT",
-  "version": "0.1.22",
+  "version": "1.0.0",
   "main": "dist-electron/main.js",
   "engines": {
     "node": ">=24 <25"
@@ -78,6 +78,7 @@
     "@types/extract-zip": "^2.0.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/react-syntax-highlighter": "^15.5.13",
@@ -89,6 +90,7 @@
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
+    "dmg-license": "^1.0.11",
     "electron": "40.2.1",
     "electron-builder": "^24.12.0",
     "eslint": "^8.56.0",
