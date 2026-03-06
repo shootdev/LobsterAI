@@ -128,7 +128,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     });
   };
 
-  const handleStartImnutBind = () => {
+  const handleStartImnutBind = async () => {
+    await handleImnutEnvironmentChange('release');
     const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
     setImnutBindKey(key);
     setImnutBindStatus('pending');
@@ -170,6 +171,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     }
     hasAutoOpenedQzhuliBindRef.current = true;
     setActivePlatform('imnut');
+    void handleImnutEnvironmentChange('release');
     const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
     setImnutBindKey(key);
     setImnutBindStatus('pending');
@@ -1023,7 +1025,9 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
             <div>
               <button
                 type="button"
-                onClick={handleStartImnutBind}
+                onClick={() => {
+                  void handleStartImnutBind();
+                }}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors active:scale-[0.98]"
               >
                 扫码绑定
