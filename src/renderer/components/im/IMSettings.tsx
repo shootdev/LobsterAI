@@ -41,9 +41,10 @@ const checkLevelColorClass: Record<IMConnectivityCheck['level'], string> = {
 
 type IMSettingsProps = {
   onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
+  onImnutBindCompleted?: () => void;
 };
 
-const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
+const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnutBindCompleted }) => {
   const dispatch = useDispatch();
   const { config, status, isLoading } = useSelector((state: RootState) => state.im);
   const [activePlatform, setActivePlatform] = useState<IMPlatform>('dingtalk');
@@ -413,10 +414,25 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
             senderCid: result.result.cid,
             wsToken: result.result.token,
           };
-          dispatch(setImnutConfig(nextConfig));
-          await imService.updateConfig({ imnut: nextConfig });
+          const enabledConfig = {
+            ...nextConfig,
+            enabled: true,
+          };
+          dispatch(setImnutConfig(enabledConfig));
+          await imService.updateConfig({ imnut: enabledConfig });
+          dispatch(clearError());
+          const gatewayStarted = await imService.startGateway('imnut');
+          if (!gatewayStarted) {
+            dispatch(setImnutConfig({ enabled: false }));
+            await imService.updateConfig({ imnut: { ...enabledConfig, enabled: false } });
+          } else {
+            await runConnectivityTest('imnut', {
+              imnut: enabledConfig,
+            });
+          }
           setImnutBindStatus('bound');
           setImnutBindModalOpen(false);
+          onImnutBindCompleted?.();
         } else {
           setImnutBindStatus('pending');
         }
@@ -435,7 +451,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [imnutBindModalOpen, imnutBindKey, config.imnut.environment, config.imnut, dispatch]);
+  }, [imnutBindModalOpen, imnutBindKey, config.imnut.environment, config.imnut, dispatch, onImnutBindCompleted]);
 
   // Handle platform toggle
   const handlePlatformToggle = (platform: IMPlatform) => {
