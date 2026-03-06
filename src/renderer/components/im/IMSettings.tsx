@@ -1125,7 +1125,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b dark:border-slate-800 border-slate-100">
                 <div className="flex items-center gap-2.5">
-                  <img src="ai-robot.png" alt="Q助理" className="w-7 h-7 object-contain rounded-md" />
+                  <img src="logo.png" alt="Q助理" className="w-7 h-7 object-contain rounded-md" />
                   <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 tracking-tight">Q助理</span>
                 </div>
                 <div className="flex items-center gap-1.5">
