@@ -23,7 +23,7 @@ const platformMeta: Record<IMPlatform, { label: string; logo: string }> = {
   telegram: { label: 'Telegram', logo: 'telegram.svg' },
   discord: { label: 'Discord', logo: 'discord.svg' },
   nim: { label: '云信', logo: 'nim.png' },
-  imnut: { label: 'QZhuli', logo: 'qzhuli.png' },
+  imnut: { label: 'Q助理', logo: 'qzhuli.png' },
 };
 
 const verdictColorClass: Record<IMConnectivityTestResult['verdict'], string> = {
@@ -1010,7 +1010,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
                 onClick={handleStartImnutBind}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors active:scale-[0.98]"
               >
-                Bind via QR
+                扫码绑定
               </button>
             </div>
 
