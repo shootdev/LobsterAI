@@ -1,6 +1,6 @@
 const UPDATE_CHECK_URL = import.meta.env.DEV
-  ? 'https://client.qzhuli.com/sys/lobsterai_update_config'
-  : 'https://test.client.qzhuli.com/sys/lobsterai_update_config';
+  ? 'https://test.client.qzhuli.com/sys/lobsterai_update_config'
+  : 'https://client.qzhuli.com/sys/lobsterai_update_config';
 const FALLBACK_DOWNLOAD_URL = import.meta.env.DEV
   ? ''
   : '';
