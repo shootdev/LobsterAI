@@ -1115,46 +1115,93 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
 
         {imnutBindModalOpen && (
           <div
-            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={handleCloseImnutBindModal}
           >
             <div
-              className="w-full max-w-md dark:bg-claude-darkSurface bg-claude-surface rounded-2xl shadow-modal border dark:border-claude-darkBorder border-claude-border overflow-hidden"
+              className="w-full max-w-[360px] dark:bg-slate-900 bg-white rounded-2xl shadow-2xl border dark:border-slate-700/60 border-slate-200 overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-4 py-3 border-b dark:border-claude-darkBorder border-claude-border flex items-center justify-between">
-                <div className="text-sm font-semibold dark:text-claude-darkText text-claude-text">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b dark:border-slate-800 border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <img src="ai-robot.png" alt="Q助理" className="w-7 h-7 object-contain rounded-md" />
+                  <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 tracking-tight">Q助理</span>
                 </div>
-                <button
-                  type="button"
-                  aria-label={i18nService.t('close')}
-                  onClick={handleCloseImnutBindModal}
-                  className="p-1 rounded-md dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover dark:text-claude-darkTextSecondary text-claude-textSecondary"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={i18nService.t('close')}
+                    onClick={handleCloseImnutBindModal}
+                    className="flex items-center justify-center rounded-full size-7 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:text-slate-400 text-slate-500 transition-colors"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="p-4 space-y-3">
-                {qzhuliBindQrDataUrl ? (
-                  <img
-                    src={qzhuliBindQrDataUrl}
-                    alt="QZhuli bind QR"
-                    className="mx-auto rounded-md border dark:border-claude-darkBorder border-claude-border"
-                  />
-                ) : (
-                  <div className="mx-auto h-[220px] w-[220px] rounded-md border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurfaceHover bg-claude-surfaceHover" />
-                )}
-                <div className="text-sm text-center dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                  用Q助理扫一扫
-                </div>
-                {imnutBindError && (
-                  <div className="text-xs text-red-500 bg-red-500/10 px-2 py-1.5 rounded-lg">{imnutBindError}</div>
-                )}
-                {imnutBindStatus === 'bound' && (
-                  <div className="text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1.5 rounded-lg">
-                    Bound successfully. Credentials are filled automatically.
+
+              {/* Body */}
+              <div className="flex flex-col items-center px-8 pt-8 pb-9 text-center">
+                <h1 className="text-lg font-bold dark:text-slate-100 text-slate-900 mb-7 tracking-tight">
+                  登录Q助理电脑机器人
+                </h1>
+
+                {/* QR Code Frame */}
+                <div className="relative">
+                  <div className="p-3.5 bg-white dark:bg-slate-800 rounded-2xl border-2 dark:border-slate-700 border-slate-100 shadow-sm transition-colors">
+                    <div className="size-48 bg-slate-100 dark:bg-slate-700 rounded-xl overflow-hidden flex items-center justify-center relative">
+                      {qzhuliBindQrDataUrl ? (
+                        <img
+                          src={qzhuliBindQrDataUrl}
+                          alt="QZhuli bind QR"
+                          className="w-full h-full object-contain p-1.5"
+                        />
+                      ) : (
+                        /* Loading skeleton */
+                        <div className="w-full h-full animate-pulse bg-slate-200 dark:bg-slate-600 rounded-xl" />
+                      )}
+                      {/* Center logo overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="bg-white dark:bg-slate-800 p-1 rounded-md shadow-md border border-slate-100 dark:border-slate-700">
+                          <img src="qzhuli.png" alt="" className="w-7 h-7 object-contain" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  {/* Status ping indicator */}
+                  <div className="absolute -top-1 -right-1 flex h-3.5 w-3.5 z-10">
+                    {imnutBindStatus === 'bound' ? (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500" />
+                      </>
+                    ) : imnutBindStatus === 'error' ? (
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500" />
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#135bec] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#135bec]" />
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="mt-7 flex flex-col items-center gap-2">
+                  {imnutBindStatus === 'bound' ? (
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                      已绑定成功 ✓
+                    </p>
+                  ) : imnutBindError ? (
+                    <p className="text-sm text-red-500 dark:text-red-400">{imnutBindError}</p>
+                  ) : (
+                    <p className="text-sm font-medium dark:text-slate-200 text-slate-700">用Q助理扫一扫</p>
+                  )}
+                  <p className="text-xs dark:text-slate-500 text-slate-400">
+                    打开 Q助理 App &rarr; 扫码登录
+                  </p>
+                </div>
               </div>
             </div>
           </div>
