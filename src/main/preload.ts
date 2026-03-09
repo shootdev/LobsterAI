@@ -254,17 +254,17 @@ contextBridge.exposeInMainWorld('electron', {
     setConfig: (config: any) => ipcRenderer.invoke('im:config:set', config),
 
     // Gateway control
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut') => ipcRenderer.invoke('im:gateway:start', platform),
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut') => ipcRenderer.invoke('im:gateway:stop', platform),
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => ipcRenderer.invoke('im:gateway:start', platform),
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => ipcRenderer.invoke('im:gateway:stop', platform),
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut',
+      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli',
       configOverride?: any
     ) => ipcRenderer.invoke('im:gateway:test', platform, configOverride),
 
     // Status
     getStatus: () => ipcRenderer.invoke('im:status:get'),
-    getImnutBindStatus: (key: string, environment: 'dev' | 'release') =>
-      ipcRenderer.invoke('im:imnut:bindStatus', key, environment),
+    getQzhuliBindStatus: (key: string, environment: 'dev' | 'release') =>
+      ipcRenderer.invoke('im:qzhuli:bindStatus', key, environment),
 
     // Event listeners
     onStatusChange: (callback: (status: any) => void) => {

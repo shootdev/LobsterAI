@@ -530,13 +530,13 @@ const getCoworkRunner = () => {
       const messageType = message?.type;
       const content = typeof message?.content === 'string' ? message.content.trim() : '';
       const isThinking = Boolean(message?.metadata?.isThinking);
-      const shouldSyncToImnut = (
+      const shouldSyncToQzhuli = (
         (messageType === 'user' || messageType === 'assistant')
         && content.length > 0
         && !(messageType === 'assistant' && isThinking)
       );
 
-      if (!shouldSyncToImnut) {
+      if (!shouldSyncToQzhuli) {
         return;
       }
 
@@ -544,20 +544,20 @@ const getCoworkRunner = () => {
         try {
           const imManager = getIMGatewayManager();
           if (!imManager) {
-            console.info('[main] Skip IMNut sync: IM gateway manager unavailable', { sessionId, messageType });
+            console.info('[main] Skip QZhuli sync: IM gateway manager unavailable', { sessionId, messageType });
             return;
           }
-          const conversationId = imManager.getMappedConversationIdByCoworkSession(sessionId, 'imnut');
+          const conversationId = imManager.getMappedConversationIdByCoworkSession(sessionId, 'qzhuli');
           if (!conversationId) {
-            console.info('[main] Skip IMNut sync: no mapped IMNut conversation', { sessionId, messageType });
+            console.info('[main] Skip QZhuli sync: no mapped QZhuli conversation', { sessionId, messageType });
             return;
           }
           if (imManager.isCoworkSessionProcessingFromIM(sessionId)) {
-            console.info('[main] Skip IMNut sync: session currently processing IM inbound', { sessionId, messageType });
+            console.info('[main] Skip QZhuli sync: session currently processing IM inbound', { sessionId, messageType });
             return;
           }
-          const sent = await imManager.sendImnutConversationMessage(conversationId, content);
-          console.info('[main] Cowork message sync to IMNut completed', {
+          const sent = await imManager.sendQzhuliConversationMessage(conversationId, content);
+          console.info('[main] Cowork message sync to QZhuli completed', {
             sessionId,
             conversationId,
             messageType,
@@ -565,7 +565,7 @@ const getCoworkRunner = () => {
             contentLength: content.length,
           });
         } catch (error) {
-          console.warn('[main] Failed to sync cowork message to IMNut:', error);
+          console.warn('[main] Failed to sync cowork message to QZhuli:', error);
         }
       })();
     });
@@ -1752,18 +1752,18 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('im:imnut:bindStatus', async (
+  ipcMain.handle('im:qzhuli:bindStatus', async (
     _event,
     key: string,
     environment: 'dev' | 'release'
   ) => {
     try {
-      const result = await getIMGatewayManager().getImnutBindStatus(key, environment);
+      const result = await getIMGatewayManager().getQzhuliBindStatus(key, environment);
       return { success: true, result };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to poll IMNut bind status',
+        error: error instanceof Error ? error.message : 'Failed to poll QZhuli bind status',
       };
     }
   });

@@ -2599,7 +2599,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
                 },
               }));
             }}
-            onImnutBindCompleted={onClose}
+            onQzhuliBindCompleted={onClose}
           />
         );
 

@@ -318,14 +318,14 @@ interface IElectronAPI {
   im: {
     getConfig: () => Promise<{ success: boolean; config?: IMGatewayConfig; error?: string }>;
     setConfig: (config: Partial<IMGatewayConfig>) => Promise<{ success: boolean; error?: string }>;
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut') => Promise<{ success: boolean; error?: string }>;
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut') => Promise<{ success: boolean; error?: string }>;
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => Promise<{ success: boolean; error?: string }>;
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => Promise<{ success: boolean; error?: string }>;
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut',
+      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli',
       configOverride?: Partial<IMGatewayConfig>
     ) => Promise<{ success: boolean; result?: IMConnectivityTestResult; error?: string }>;
     getStatus: () => Promise<{ success: boolean; status?: IMGatewayStatus; error?: string }>;
-    getImnutBindStatus: (
+    getQzhuliBindStatus: (
       key: string,
       environment: 'dev' | 'release'
     ) => Promise<{
@@ -374,7 +374,7 @@ interface IMGatewayConfig {
   telegram: TelegramConfig;
   discord: DiscordConfig;
   nim: NimConfig;
-  imnut: ImnutConfig;
+  qzhuli: QzhuliConfig;
   settings: IMSettings;
 }
 
@@ -421,7 +421,7 @@ interface NimConfig {
   debug?: boolean;
 }
 
-interface ImnutConfig {
+interface QzhuliConfig {
   enabled: boolean;
   environment: 'dev' | 'release';
   convId: string;
@@ -445,7 +445,7 @@ interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
-  imnut: ImnutGatewayStatus;
+  qzhuli: QzhuliGatewayStatus;
 }
 
 type IMConnectivityVerdict = 'pass' | 'warn' | 'fail';
@@ -465,7 +465,7 @@ type IMConnectivityCheckCode =
   | 'telegram_privacy_mode_hint'
   | 'dingtalk_bot_membership_hint'
   | 'nim_p2p_only_hint'
-  | 'imnut_bridge_hint';
+  | 'qzhuli_bridge_hint';
 
 interface IMConnectivityCheck {
   code: IMConnectivityCheckCode;
@@ -475,7 +475,7 @@ interface IMConnectivityCheck {
 }
 
 interface IMConnectivityTestResult {
-  platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut';
+  platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli';
   testedAt: number;
   verdict: IMConnectivityVerdict;
   checks: IMConnectivityCheck[];
@@ -526,7 +526,7 @@ interface NimGatewayStatus {
   lastOutboundAt: number | null;
 }
 
-interface ImnutGatewayStatus {
+interface QzhuliGatewayStatus {
   connected: boolean;
   startedAt: number | null;
   lastError: string | null;
@@ -536,7 +536,7 @@ interface ImnutGatewayStatus {
 }
 
 interface IMMessage {
-  platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut';
+  platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli';
   messageId: string;
   conversationId: string;
   senderId: string;

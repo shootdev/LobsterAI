@@ -1,5 +1,5 @@
 // IM 平台分类
-export const CHINA_IM_PLATFORMS = ['dingtalk', 'feishu', 'nim', 'imnut'] as const;
+export const CHINA_IM_PLATFORMS = ['dingtalk', 'feishu', 'nim', 'qzhuli'] as const;
 export const GLOBAL_IM_PLATFORMS = ['telegram', 'discord'] as const;
 
 /**

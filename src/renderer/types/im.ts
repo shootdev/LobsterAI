@@ -102,9 +102,9 @@ export interface NimGatewayStatus {
   lastOutboundAt: number | null;
 }
 
-// ==================== IMNut Types ====================
+// ==================== QZhuli Types ====================
 
-export interface ImnutConfig {
+export interface QzhuliConfig {
   enabled: boolean;
   environment: 'dev' | 'release';
   convId: string;
@@ -117,7 +117,7 @@ export interface ImnutConfig {
   debug?: boolean;
 }
 
-export interface ImnutGatewayStatus {
+export interface QzhuliGatewayStatus {
   connected: boolean;
   startedAt: number | null;
   lastError: string | null;
@@ -128,7 +128,7 @@ export interface ImnutGatewayStatus {
 
 // ==================== Common IM Types ====================
 
-export type IMPlatform = 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'imnut';
+export type IMPlatform = 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli';
 
 export interface IMGatewayConfig {
   dingtalk: DingTalkConfig;
@@ -136,7 +136,7 @@ export interface IMGatewayConfig {
   telegram: TelegramConfig;
   discord: DiscordConfig;
   nim: NimConfig;
-  imnut: ImnutConfig;
+  qzhuli: QzhuliConfig;
   settings: IMSettings;
 }
 
@@ -151,7 +151,7 @@ export interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
-  imnut: ImnutGatewayStatus;
+  qzhuli: QzhuliGatewayStatus;
 }
 
 // ==================== Media Attachment Types ====================
@@ -220,7 +220,7 @@ export type IMConnectivityCheckCode =
   | 'telegram_privacy_mode_hint'
   | 'dingtalk_bot_membership_hint'
   | 'nim_p2p_only_hint'
-  | 'imnut_bridge_hint';
+  | 'qzhuli_bridge_hint';
 
 export interface IMConnectivityCheck {
   code: IMConnectivityCheckCode;
@@ -282,7 +282,7 @@ export const DEFAULT_NIM_CONFIG: NimConfig = {
   debug: true,
 };
 
-export const DEFAULT_IMNUT_CONFIG: ImnutConfig = {
+export const DEFAULT_QZHULI_CONFIG: QzhuliConfig = {
   enabled: false,
   environment: 'release',
   convId: '',
@@ -306,7 +306,7 @@ export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
   telegram: DEFAULT_TELEGRAM_CONFIG,
   discord: DEFAULT_DISCORD_CONFIG,
   nim: DEFAULT_NIM_CONFIG,
-  imnut: DEFAULT_IMNUT_CONFIG,
+  qzhuli: DEFAULT_QZHULI_CONFIG,
   settings: DEFAULT_IM_SETTINGS,
 };
 
@@ -351,7 +351,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
     lastInboundAt: null,
     lastOutboundAt: null,
   },
-  imnut: {
+  qzhuli: {
     connected: false,
     startedAt: null,
     lastError: null,

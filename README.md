@@ -135,7 +135,7 @@ src/
 │   ├── sqliteStore.ts              # SQLite storage
 │   ├── coworkStore.ts              # Session/message CRUD
 │   ├── skillManager.ts             # Skill management
-│   ├── im/                         # IM gateways (DingTalk/Feishu/Telegram/Discord/NIM/IMNut)
+│   ├── im/                         # IM gateways (DingTalk/Feishu/Telegram/Discord/NIM/QZhuli)
 │   └── libs/
 │       ├── coworkRunner.ts         # Agent SDK executor
 │       ├── coworkVmRunner.ts       # Sandbox VM execution

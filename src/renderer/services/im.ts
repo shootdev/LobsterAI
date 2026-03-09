@@ -225,7 +225,7 @@ class IMService {
       || status.telegram.connected
       || status.discord.connected
       || status.nim.connected
-      || status.imnut.connected;
+      || status.qzhuli.connected;
   }
 }
 

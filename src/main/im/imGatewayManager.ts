@@ -1,6 +1,6 @@
 /**
  * IM Gateway Manager
- * Unified manager for all IM gateways (DingTalk/Feishu/Telegram/Discord/NIM/IMNut)
+ * Unified manager for all IM gateways (DingTalk/Feishu/Telegram/Discord/NIM/QZhuli)
  */
 
 import { EventEmitter } from 'events';
@@ -9,7 +9,7 @@ import { FeishuGateway } from './feishuGateway';
 import { TelegramGateway } from './telegramGateway';
 import { DiscordGateway } from './discordGateway';
 import { NimGateway } from './nimGateway';
-import { ImnutGateway } from './imnutGateway';
+import { QzhuliGateway } from './qzhuliGateway';
 import { IMChatHandler } from './imChatHandler';
 import { IMCoworkHandler } from './imCoworkHandler';
 import { IMStore } from './imStore';
@@ -29,8 +29,8 @@ import type { CoworkRunner } from '../libs/coworkRunner';
 import type { CoworkStore } from '../coworkStore';
 const CONNECTIVITY_TIMEOUT_MS = 10_000;
 const INBOUND_ACTIVITY_WARN_AFTER_MS = 2 * 60 * 1000;
-const IMNUT_HOST_DEV = 'test.im.qzhuli.com';
-const IMNUT_HOST_RELEASE = 'im.qzhuli.com';
+const QZHULI_HOST_DEV = 'test.im.qzhuli.com';
+const QZHULI_HOST_RELEASE = 'im.qzhuli.com';
 const QZHULI_CLIENT_HOST_DEV = 'test.client.qzhuli.com';
 const QZHULI_CLIENT_HOST_RELEASE = 'client.qzhuli.com';
 
@@ -47,7 +47,7 @@ interface DiscordUserResponse {
   discriminator?: string;
 }
 
-interface ImnutBindStatusPayload {
+interface QzhuliBindStatusPayload {
   status?: 0 | 1;
   conv_id?: string;
   conversation_id?: string;
@@ -69,7 +69,7 @@ export class IMGatewayManager extends EventEmitter {
   private telegramGateway: TelegramGateway;
   private discordGateway: DiscordGateway;
   private nimGateway: NimGateway;
-  private imnutGateway: ImnutGateway;
+  private qzhuliGateway: QzhuliGateway;
   private imStore: IMStore;
   private chatHandler: IMChatHandler | null = null;
   private coworkHandler: IMCoworkHandler | null = null;
@@ -89,7 +89,7 @@ export class IMGatewayManager extends EventEmitter {
     this.telegramGateway = new TelegramGateway();
     this.discordGateway = new DiscordGateway();
     this.nimGateway = new NimGateway();
-    this.imnutGateway = new ImnutGateway();
+    this.qzhuliGateway = new QzhuliGateway();
 
     // Store Cowork dependencies if provided
     if (options?.coworkRunner && options?.coworkStore) {
@@ -186,21 +186,21 @@ export class IMGatewayManager extends EventEmitter {
       this.emit('message', message);
     });
 
-    // IMNut events
-    this.imnutGateway.on('status', () => {
+    // QZhuli events
+    this.qzhuliGateway.on('status', () => {
       this.emit('statusChange', this.getStatus());
     });
-    this.imnutGateway.on('connected', () => {
+    this.qzhuliGateway.on('connected', () => {
       this.emit('statusChange', this.getStatus());
     });
-    this.imnutGateway.on('disconnected', () => {
+    this.qzhuliGateway.on('disconnected', () => {
       this.emit('statusChange', this.getStatus());
     });
-    this.imnutGateway.on('error', (error) => {
-      this.emit('error', { platform: 'imnut', error });
+    this.qzhuliGateway.on('error', (error) => {
+      this.emit('error', { platform: 'qzhuli', error });
       this.emit('statusChange', this.getStatus());
     });
-    this.imnutGateway.on('message', (message: IMMessage) => {
+    this.qzhuliGateway.on('message', (message: IMMessage) => {
       this.emit('message', message);
     });
   }
@@ -236,9 +236,9 @@ export class IMGatewayManager extends EventEmitter {
       console.log('[IMGatewayManager] Reconnecting NIM...');
       this.nimGateway.reconnectIfNeeded();
     }
-    if (this.imnutGateway && !this.imnutGateway.isConnected()) {
-      console.log('[IMGatewayManager] Reconnecting IMNut...');
-      this.imnutGateway.reconnectIfNeeded();
+    if (this.qzhuliGateway && !this.qzhuliGateway.isConnected()) {
+      console.log('[IMGatewayManager] Reconnecting QZhuli...');
+      this.qzhuliGateway.reconnectIfNeeded();
     }
   }
 
@@ -308,7 +308,7 @@ export class IMGatewayManager extends EventEmitter {
     this.telegramGateway.setMessageCallback(messageHandler);
     this.discordGateway.setMessageCallback(messageHandler);
     this.nimGateway.setMessageCallback(messageHandler);
-    this.imnutGateway.setMessageCallback(messageHandler);
+    this.qzhuliGateway.setMessageCallback(messageHandler);
   }
 
   /**
@@ -437,7 +437,7 @@ export class IMGatewayManager extends EventEmitter {
       telegram: this.telegramGateway.getStatus(),
       discord: this.discordGateway.getStatus(),
       nim: this.nimGateway.getStatus(),
-      imnut: this.imnutGateway.getStatus(),
+      qzhuli: this.qzhuliGateway.getStatus(),
     };
   }
 
@@ -627,11 +627,11 @@ export class IMGatewayManager extends EventEmitter {
         message: '云信 IM 当前仅支持 P2P（私聊）消息。',
         suggestion: '请通过私聊方式向机器人账号发送消息触发对话。',
       });
-    } else if (platform === 'imnut') {
+    } else if (platform === 'qzhuli') {
       addCheck({
-        code: 'imnut_bridge_hint',
+        code: 'qzhuli_bridge_hint',
         level: 'info',
-        message: 'IMNut 通过 websocket 入站 + HTTP 回发桥接消息。',
+        message: 'QZhuli 通过 websocket 入站 + HTTP 回发桥接消息。',
         suggestion: '请确认 senderCid、convId、wsToken 填写正确，且环境域名可访问。',
       });
     }
@@ -665,8 +665,8 @@ export class IMGatewayManager extends EventEmitter {
       await this.discordGateway.start(config.discord);
     } else if (platform === 'nim') {
       await this.nimGateway.start(config.nim);
-    } else if (platform === 'imnut') {
-      await this.imnutGateway.start(config.imnut);
+    } else if (platform === 'qzhuli') {
+      await this.qzhuliGateway.start(config.qzhuli);
     }
 
     // Restore persisted notification target
@@ -687,8 +687,8 @@ export class IMGatewayManager extends EventEmitter {
       await this.discordGateway.stop();
     } else if (platform === 'nim') {
       await this.nimGateway.stop();
-    } else if (platform === 'imnut') {
-      await this.imnutGateway.stop();
+    } else if (platform === 'qzhuli') {
+      await this.qzhuliGateway.stop();
     }
   }
 
@@ -738,11 +738,11 @@ export class IMGatewayManager extends EventEmitter {
       }
     }
 
-    if (config.imnut.enabled && config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken) {
+    if (config.qzhuli.enabled && config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken) {
       try {
-        await this.startGateway('imnut');
+        await this.startGateway('qzhuli');
       } catch (error: any) {
-        console.error(`[IMGatewayManager] Failed to start IMNut: ${error.message}`);
+        console.error(`[IMGatewayManager] Failed to start QZhuli: ${error.message}`);
       }
     }
   }
@@ -757,7 +757,7 @@ export class IMGatewayManager extends EventEmitter {
       this.telegramGateway.stop(),
       this.discordGateway.stop(),
       this.nimGateway.stop(),
-      this.imnutGateway.stop(),
+      this.qzhuliGateway.stop(),
     ]);
   }
 
@@ -770,7 +770,7 @@ export class IMGatewayManager extends EventEmitter {
       || this.telegramGateway.isConnected()
       || this.discordGateway.isConnected()
       || this.nimGateway.isConnected()
-      || this.imnutGateway.isConnected();
+      || this.qzhuliGateway.isConnected();
   }
 
   /**
@@ -789,15 +789,15 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'nim') {
       return this.nimGateway.isConnected();
     }
-    if (platform === 'imnut') {
-      return this.imnutGateway.isConnected();
+    if (platform === 'qzhuli') {
+      return this.qzhuliGateway.isConnected();
     }
     return this.feishuGateway.isConnected();
   }
 
   getMappedConversationIdByCoworkSession(
     coworkSessionId: string,
-    platform: IMPlatform = 'imnut'
+    platform: IMPlatform = 'qzhuli'
   ): string | null {
     if (!coworkSessionId) return null;
     const mappings = this.imStore.listSessionMappings(platform);
@@ -813,9 +813,9 @@ export class IMGatewayManager extends EventEmitter {
     return this.coworkHandler?.isSessionProcessing(sessionId) ?? false;
   }
 
-  async sendImnutConversationMessage(conversationId: string, text: string): Promise<boolean> {
-    if (!this.isConnected('imnut')) {
-      console.warn('[IMGatewayManager] Cannot send IMNut conversation message: imnut is not connected', {
+  async sendQzhuliConversationMessage(conversationId: string, text: string): Promise<boolean> {
+    if (!this.isConnected('qzhuli')) {
+      console.warn('[IMGatewayManager] Cannot send QZhuli conversation message: qzhuli is not connected', {
         conversationId,
         textLength: text.length,
       });
@@ -823,14 +823,14 @@ export class IMGatewayManager extends EventEmitter {
     }
 
     try {
-      await this.imnutGateway.sendToConversation(conversationId, text);
-      console.info('[IMGatewayManager] Sent IMNut conversation message', {
+      await this.qzhuliGateway.sendToConversation(conversationId, text);
+      console.info('[IMGatewayManager] Sent QZhuli conversation message', {
         conversationId,
         textLength: text.length,
       });
       return true;
     } catch (error: any) {
-      console.error('[IMGatewayManager] Failed to send IMNut conversation message:', error.message, {
+      console.error('[IMGatewayManager] Failed to send QZhuli conversation message:', error.message, {
         conversationId,
         textLength: text.length,
       });
@@ -860,8 +860,8 @@ export class IMGatewayManager extends EventEmitter {
         await this.discordGateway.sendNotification(text);
       } else if (platform === 'nim') {
         await this.nimGateway.sendNotification(text);
-      } else if (platform === 'imnut') {
-        await this.imnutGateway.sendNotification(text);
+      } else if (platform === 'qzhuli') {
+        await this.qzhuliGateway.sendNotification(text);
       }
       return true;
     } catch (error: any) {
@@ -908,7 +908,7 @@ export class IMGatewayManager extends EventEmitter {
       telegram: { ...current.telegram, ...(configOverride.telegram || {}) },
       discord: { ...current.discord, ...(configOverride.discord || {}) },
       nim: { ...current.nim, ...(configOverride.nim || {}) },
-      imnut: { ...current.imnut, ...(configOverride.imnut || {}) },
+      qzhuli: { ...current.qzhuli, ...(configOverride.qzhuli || {}) },
       settings: { ...current.settings, ...(configOverride.settings || {}) },
     };
   }
@@ -936,11 +936,11 @@ export class IMGatewayManager extends EventEmitter {
       if (!config.nim.token) fields.push('token');
       return fields;
     }
-    if (platform === 'imnut') {
+    if (platform === 'qzhuli') {
       const fields: string[] = [];
-      if (!config.imnut.senderCid) fields.push('senderCid');
-      if (!config.imnut.convId) fields.push('convId');
-      if (!config.imnut.wsToken) fields.push('wsToken');
+      if (!config.qzhuli.senderCid) fields.push('senderCid');
+      if (!config.qzhuli.convId) fields.push('convId');
+      if (!config.qzhuli.wsToken) fields.push('wsToken');
       return fields;
     }
     return config.discord.botToken ? [] : ['botToken'];
@@ -995,11 +995,11 @@ export class IMGatewayManager extends EventEmitter {
       // check will happen when the user enables the gateway and the SDK logs in.
       return `云信配置已填写（Account: ${config.nim.account}）。请启用渠道，SDK 登录时将完成实际凭证验证。`;
     }
-    if (platform === 'imnut') {
-      if (this.imnutGateway.isConnected()) {
-        return `IMNut 连通（SenderCID: ${config.imnut.senderCid}，convId: ${config.imnut.convId}）。`;
+    if (platform === 'qzhuli') {
+      if (this.qzhuliGateway.isConnected()) {
+        return `QZhuli 连通（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}）。`;
       }
-      return `IMNut 配置已填写（SenderCID: ${config.imnut.senderCid}，convId: ${config.imnut.convId}，wsToken: 已配置）。`;
+      return `QZhuli 配置已填写（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}，wsToken: 已配置）。`;
     }
     const response = await fetchJsonWithTimeout<DiscordUserResponse>('https://discord.com/api/v10/users/@me', {
       headers: {
@@ -1035,7 +1035,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'dingtalk') return status.dingtalk.startedAt;
     if (platform === 'telegram') return status.telegram.startedAt;
     if (platform === 'nim') return status.nim.startedAt;
-    if (platform === 'imnut') return status.imnut.startedAt;
+    if (platform === 'qzhuli') return status.qzhuli.startedAt;
     return status.discord.startedAt;
   }
 
@@ -1044,7 +1044,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastInboundAt;
     if (platform === 'telegram') return status.telegram.lastInboundAt;
     if (platform === 'nim') return status.nim.lastInboundAt;
-    if (platform === 'imnut') return status.imnut.lastInboundAt;
+    if (platform === 'qzhuli') return status.qzhuli.lastInboundAt;
     return status.discord.lastInboundAt;
   }
 
@@ -1053,7 +1053,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastOutboundAt;
     if (platform === 'telegram') return status.telegram.lastOutboundAt;
     if (platform === 'nim') return status.nim.lastOutboundAt;
-    if (platform === 'imnut') return status.imnut.lastOutboundAt;
+    if (platform === 'qzhuli') return status.qzhuli.lastOutboundAt;
     return status.discord.lastOutboundAt;
   }
 
@@ -1062,7 +1062,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.error;
     if (platform === 'telegram') return status.telegram.lastError;
     if (platform === 'nim') return status.nim.lastError;
-    if (platform === 'imnut') return status.imnut.lastError;
+    if (platform === 'qzhuli') return status.qzhuli.lastError;
     return status.discord.lastError;
   }
 
@@ -1076,7 +1076,7 @@ export class IMGatewayManager extends EventEmitter {
     return 'pass';
   }
 
-  async getImnutBindStatus(
+  async getQzhuliBindStatus(
     key: string,
     environment: 'dev' | 'release'
   ): Promise<{
@@ -1087,11 +1087,11 @@ export class IMGatewayManager extends EventEmitter {
     apiModelBaseUrl?: string;
     apiModelKey?: string;
   }> {
-    console.info('[IMGatewayManager] Polling IMNut bind status', { environment });
+    console.info('[IMGatewayManager] Polling QZhuli bind status', { environment });
     const host = environment === 'release' ? QZHULI_CLIENT_HOST_RELEASE : QZHULI_CLIENT_HOST_DEV;
     const url = `https://${host}/aimachine/check_bind_status?bind_key=${encodeURIComponent(key)}`;
     const response = await fetchJsonWithTimeout<any>(url, {}, CONNECTIVITY_TIMEOUT_MS);
-    const data = (response?.data || response) as ImnutBindStatusPayload;
+    const data = (response?.data || response) as QzhuliBindStatusPayload;
 
     const convId = data.conv_id || data.conversation_id;
     const token = data.token || data.bind_token;
@@ -1101,7 +1101,7 @@ export class IMGatewayManager extends EventEmitter {
       data.api_model_key
 
     if (data.status === 1 && convId && data.cid && token) {
-      console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'bound' });
+      console.info('[IMGatewayManager] QZhuli bind status resolved', { environment, status: 'bound' });
       return {
         status: 'bound',
         convId,
@@ -1111,7 +1111,7 @@ export class IMGatewayManager extends EventEmitter {
         apiModelKey: apiModelKey?.trim() || undefined,
       };
     }
-    console.info('[IMGatewayManager] IMNut bind status resolved', { environment, status: 'pending' });
+    console.info('[IMGatewayManager] QZhuli bind status resolved', { environment, status: 'pending' });
     return { status: 'pending' };
   }
 }

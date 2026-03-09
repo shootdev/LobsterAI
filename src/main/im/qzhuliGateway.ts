@@ -1,33 +1,33 @@
 /**
- * IMNut Gateway
- * Bridges IMNut websocket inbound messages and HTTP push outbound replies.
+ * QZhuli Gateway
+ * Bridges QZhuli websocket inbound messages and HTTP push outbound replies.
  */
 
 import { EventEmitter } from 'events';
 import {
-  ImnutConfig,
-  ImnutGatewayStatus,
+  QzhuliConfig,
+  QzhuliGatewayStatus,
   IMMessage,
-  DEFAULT_IMNUT_STATUS,
+  DEFAULT_QZHULI_STATUS,
 } from './types';
 
 /** Header name expected by ServeWssOpenClaw when OpenClawWSToken is configured. */
 const OPENCLAW_TOKEN_HEADER = 'X-OpenClaw-Token';
 
-const DEFAULT_IMNUT_HOST_DEV = 'test.im.qzhuli.com';
-const DEFAULT_IMNUT_HOST_RELEASE = 'im.qzhuli.com';
+const DEFAULT_QZHULI_HOST_DEV = 'test.im.qzhuli.com';
+const DEFAULT_QZHULI_HOST_RELEASE = 'im.qzhuli.com';
 const DEFAULT_PUSH_PATH = '/api/v1/conversations/push_message';
 const DEFAULT_WS_URL_PATH = '/wss_openclaw';
 const DEFAULT_MSG_TYPE = 1;
 const DEFAULT_RECONNECT_MS = 2_000;
 const DEFAULT_MAX_RECONNECT_MS = 30_000;
 
-function resolveImnutHost(config: ImnutConfig): string {
-  return config.environment === 'release' ? DEFAULT_IMNUT_HOST_RELEASE : DEFAULT_IMNUT_HOST_DEV;
+function resolveQzhuliHost(config: QzhuliConfig): string {
+  return config.environment === 'release' ? DEFAULT_QZHULI_HOST_RELEASE : DEFAULT_QZHULI_HOST_DEV;
 }
 
-function getImnutBaseUrl(config: ImnutConfig): string {
-  return `https://${resolveImnutHost(config)}`;
+function getQzhuliBaseUrl(config: QzhuliConfig): string {
+  return `https://${resolveQzhuliHost(config)}`;
 }
 
 /**
@@ -42,8 +42,8 @@ function getImnutBaseUrl(config: ImnutConfig): string {
  *  3. token matches the stored DB token for cid (401 if mismatch)
  *  4. Optionally, X-OpenClaw-Token header matches OpenClawWSToken config
  */
-function getImnutWsUrl(config: ImnutConfig): string {
-  const base = `wss://${resolveImnutHost(config)}${DEFAULT_WS_URL_PATH}`;
+function getQzhuliWsUrl(config: QzhuliConfig): string {
+  const base = `wss://${resolveQzhuliHost(config)}${DEFAULT_WS_URL_PATH}`;
   const params = new URLSearchParams();
   params.set('cid', config.senderCid.trim());
   params.set('token', config.wsToken.trim());
@@ -51,10 +51,10 @@ function getImnutWsUrl(config: ImnutConfig): string {
   return `${base}?${params.toString()}`;
 }
 
-export class ImnutGateway extends EventEmitter {
+export class QzhuliGateway extends EventEmitter {
   private ws: any = null;
-  private config: ImnutConfig | null = null;
-  private status: ImnutGatewayStatus = { ...DEFAULT_IMNUT_STATUS };
+  private config: QzhuliConfig | null = null;
+  private status: QzhuliGatewayStatus = { ...DEFAULT_QZHULI_STATUS };
   private onMessageCallback?: (message: IMMessage, replyFn: (text: string) => Promise<void>) => Promise<void>;
   private lastConvId: string | null = null;
   private lastSenderCid: string | null = null;
@@ -64,7 +64,7 @@ export class ImnutGateway extends EventEmitter {
   private lastActivityAt = 0;
   private log: (...args: any[]) => void = () => {};
 
-  getStatus(): ImnutGatewayStatus {
+  getStatus(): QzhuliGatewayStatus {
     return { ...this.status };
   }
 
@@ -84,9 +84,9 @@ export class ImnutGateway extends EventEmitter {
     this.onMessageCallback = callback;
   }
 
-  async start(config: ImnutConfig): Promise<void> {
+  async start(config: QzhuliConfig): Promise<void> {
     if (this.ws) {
-      throw new Error('IMNut gateway already running');
+      throw new Error('QZhuli gateway already running');
     }
     this.config = config;
     this.log = config.debug ? console.log.bind(console) : () => {};
@@ -95,13 +95,13 @@ export class ImnutGateway extends EventEmitter {
       return;
     }
     if (!config.senderCid.trim()) {
-      throw new Error('IMNut senderCid is required');
+      throw new Error('QZhuli senderCid is required');
     }
     if (!config.convId.trim()) {
-      throw new Error('IMNut convId is required');
+      throw new Error('QZhuli convId is required');
     }
     if (!config.wsToken.trim()) {
-      throw new Error('IMNut wsToken is required');
+      throw new Error('QZhuli wsToken is required');
     }
 
     const WSImpl = (globalThis as any).WebSocket;
@@ -109,8 +109,8 @@ export class ImnutGateway extends EventEmitter {
       throw new Error('WebSocket is not available in current runtime');
     }
 
-    const wsUrl = getImnutWsUrl(config);
-    this.log('[IMNut Gateway] Starting websocket bridge:', wsUrl);
+    const wsUrl = getQzhuliWsUrl(config);
+    this.log('[QZhuli Gateway] Starting websocket bridge:', wsUrl);
 
     this.status = {
       ...this.status,
@@ -166,7 +166,7 @@ export class ImnutGateway extends EventEmitter {
         this.emit('status');
         if (!settled) {
           settled = true;
-          reject(new Error(this.status.lastError || 'IMNut websocket disconnected'));
+          reject(new Error(this.status.lastError || 'QZhuli websocket disconnected'));
           return;
         }
         if (this.config?.enabled) {
@@ -203,7 +203,7 @@ export class ImnutGateway extends EventEmitter {
   async sendNotification(text: string): Promise<void> {
     const convId = (this.lastConvId || this.config?.convId || '').trim();
     if (!convId) {
-      throw new Error('No IMNut conversation available yet');
+      throw new Error('No QZhuli conversation available yet');
     }
     await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
   }
@@ -211,7 +211,7 @@ export class ImnutGateway extends EventEmitter {
   async sendToConversation(conversationId: string, text: string): Promise<void> {
     const convId = (conversationId || '').trim();
     if (!convId) {
-      throw new Error('IMNut conversationId is required');
+      throw new Error('QZhuli conversationId is required');
     }
     await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
   }
@@ -309,10 +309,10 @@ export class ImnutGateway extends EventEmitter {
     this.emit('status');
 
     const message: IMMessage = {
-      platform: 'imnut',
+      platform: 'qzhuli',
       messageId,
       conversationId: convId,
-      senderId: senderCid || `imnut:conv:${convId}`,
+      senderId: senderCid || `qzhuli:conv:${convId}`,
       senderName: senderCid || undefined,
       content,
       chatType: 'direct',
@@ -329,9 +329,9 @@ export class ImnutGateway extends EventEmitter {
 
   private async pushMessage(convId: string, text: string, senderCid?: string): Promise<void> {
     if (!this.config) {
-      throw new Error('IMNut config missing');
+      throw new Error('QZhuli config missing');
     }
-    const endpoint = `${getImnutBaseUrl(this.config)}${DEFAULT_PUSH_PATH}`;
+    const endpoint = `${getQzhuliBaseUrl(this.config)}${DEFAULT_PUSH_PATH}`;
     const payload: Record<string, unknown> = {
       conv_id: convId,
       content: text,
@@ -360,7 +360,7 @@ export class ImnutGateway extends EventEmitter {
         throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`);
       }
       if (body && typeof body.code === 'number' && body.code !== 200) {
-        throw new Error(`IMNut API error: ${body.msg || 'unknown error'}`);
+        throw new Error(`QZhuli API error: ${body.msg || 'unknown error'}`);
       }
       this.lastConvId = convId;
       this.status.lastOutboundAt = Date.now();

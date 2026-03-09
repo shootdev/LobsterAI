@@ -185,9 +185,9 @@ const App: React.FC = () => {
           return;
         }
         const hasQzhuliConfig = !!(
-          result.config.imnut.senderCid
-          && result.config.imnut.convId
-          && result.config.imnut.wsToken
+          result.config.qzhuli.senderCid
+          && result.config.qzhuli.convId
+          && result.config.qzhuli.wsToken
         );
         if (!hasQzhuliConfig) {
           handleShowSettings({ initialTab: 'im' });

@@ -11,7 +11,7 @@ import { RootState } from '../../store';
 import { imService } from '../../services/im';
 import { configService } from '../../services/config';
 import { defaultConfig, type AppConfig } from '../../config';
-import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, setImnutConfig, clearError } from '../../store/slices/imSlice';
+import { setDingTalkConfig, setFeishuConfig, setTelegramConfig, setDiscordConfig, setNimConfig, setQzhuliConfig, clearError } from '../../store/slices/imSlice';
 import { i18nService } from '../../services/i18n';
 import type { IMPlatform, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
@@ -23,7 +23,7 @@ const platformMeta: Record<IMPlatform, { label: string; logo: string }> = {
   telegram: { label: 'Telegram', logo: 'telegram.svg' },
   discord: { label: 'Discord', logo: 'discord.svg' },
   nim: { label: '云信', logo: 'nim.png' },
-  imnut: { label: 'Q助理', logo: 'qzhuli.png' },
+  qzhuli: { label: 'Q助理', logo: 'qzhuli.png' },
 };
 
 const verdictColorClass: Record<IMConnectivityTestResult['verdict'], string> = {
@@ -41,21 +41,21 @@ const checkLevelColorClass: Record<IMConnectivityCheck['level'], string> = {
 
 type IMSettingsProps = {
   onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
-  onImnutBindCompleted?: () => void;
+  onQzhuliBindCompleted?: () => void;
 };
 
-const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnutBindCompleted }) => {
+const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onQzhuliBindCompleted }) => {
   const dispatch = useDispatch();
   const { config, status, isLoading } = useSelector((state: RootState) => state.im);
   const [activePlatform, setActivePlatform] = useState<IMPlatform>('dingtalk');
   const [testingPlatform, setTestingPlatform] = useState<IMPlatform | null>(null);
   const [connectivityResults, setConnectivityResults] = useState<Partial<Record<IMPlatform, IMConnectivityTestResult>>>({});
   const [connectivityModalPlatform, setConnectivityModalPlatform] = useState<IMPlatform | null>(null);
-  const [imnutBindModalOpen, setImnutBindModalOpen] = useState(false);
-  const [imnutBindKey, setImnutBindKey] = useState('');
+  const [qzhuliBindModalOpen, setQzhuliBindModalOpen] = useState(false);
+  const [qzhuliBindKey, setQzhuliBindKey] = useState('');
   const [qzhuliBindQrDataUrl, setQzhuliBindQrDataUrl] = useState('');
-  const [imnutBindStatus, setImnutBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
-  const [imnutBindError, setImnutBindError] = useState('');
+  const [qzhuliBindStatus, setQzhuliBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
+  const [qzhuliBindError, setQzhuliBindError] = useState('');
   const hasAutoOpenedQzhuliBindRef = useRef(false);
   const [language, setLanguage] = useState<'zh' | 'en'>(i18nService.getLanguage());
   const [allowedUserIdInput, setAllowedUserIdInput] = useState('');
@@ -109,43 +109,43 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     dispatch(setNimConfig({ [field]: value }));
   };
 
-  // Handle IMNut config change
-  const handleImnutChange = (
+  // Handle QZhuli config change
+  const handleQzhuliChange = (
     field: 'environment' | 'convId' | 'senderCid' | 'wsToken',
     value: string
   ) => {
-    dispatch(setImnutConfig({ [field]: value }));
+    dispatch(setQzhuliConfig({ [field]: value }));
   };
 
-  const handleImnutEnvironmentChange = async (environment: 'dev' | 'release') => {
-    dispatch(setImnutConfig({ environment }));
+  const handleQzhuliEnvironmentChange = async (environment: 'dev' | 'release') => {
+    dispatch(setQzhuliConfig({ environment }));
     if (!configLoaded) return;
     await imService.updateConfig({
-      imnut: {
-        ...config.imnut,
+      qzhuli: {
+        ...config.qzhuli,
         environment,
       },
     });
   };
 
-  const handleStartImnutBind = async () => {
-    await handleImnutEnvironmentChange('release');
+  const handleStartQzhuliBind = async () => {
+    await handleQzhuliEnvironmentChange('release');
     const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
-    setImnutBindKey(key);
-    setImnutBindStatus('pending');
-    setImnutBindError('');
-    setImnutBindModalOpen(true);
+    setQzhuliBindKey(key);
+    setQzhuliBindStatus('pending');
+    setQzhuliBindError('');
+    setQzhuliBindModalOpen(true);
   };
 
-  const handleCloseImnutBindModal = async () => {
-    setImnutBindModalOpen(false);
-    if (imnutBindKey) {
+  const handleCloseQzhuliBindModal = async () => {
+    setQzhuliBindModalOpen(false);
+    if (qzhuliBindKey) {
       try {
-        const result = await window.electron.im.getImnutBindStatus(imnutBindKey, config.imnut.environment);
+        const result = await window.electron.im.getQzhuliBindStatus(qzhuliBindKey, config.qzhuli.environment);
         if (result.success && result.result) {
           const apiModelBaseUrl = result.result.apiModelBaseUrl;
           const apiModelKey = result.result.apiModelKey;
-          await applyImnutModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
+          await applyQzhuliModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
         } else if (result.error) {
           console.warn('[IMSettings] Closing bind modal, final bind-status poll failed', result.error);
         }
@@ -153,39 +153,39 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
         console.warn('[IMSettings] Closing bind modal, final bind-status poll threw error', error);
       }
     }
-    const hasImnutConfig = !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
-    if (imnutBindStatus !== 'bound' && !hasImnutConfig) {
-      console.info('[IMSettings] IMNut bind modal closed without bound config, quitting app');
+    const hasQzhuliConfig = !!(config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken);
+    if (qzhuliBindStatus !== 'bound' && !hasQzhuliConfig) {
+      console.info('[IMSettings] QZhuli bind modal closed without bound config, quitting app');
       void window.electron.appInfo.quit();
       return;
     }
-    console.info('[IMSettings] IMNut bind modal close completed');
+    console.info('[IMSettings] QZhuli bind modal close completed');
   };
 
   useEffect(() => {
     if (!configLoaded || hasAutoOpenedQzhuliBindRef.current) {
       return;
     }
-    if (config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken) {
+    if (config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken) {
       return;
     }
     hasAutoOpenedQzhuliBindRef.current = true;
-    setActivePlatform('imnut');
-    void handleImnutEnvironmentChange('release');
+    setActivePlatform('qzhuli');
+    void handleQzhuliEnvironmentChange('release');
     const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
-    setImnutBindKey(key);
-    setImnutBindStatus('pending');
-    setImnutBindError('');
-    setImnutBindModalOpen(true);
-  }, [configLoaded, config.imnut.senderCid, config.imnut.convId, config.imnut.wsToken]);
+    setQzhuliBindKey(key);
+    setQzhuliBindStatus('pending');
+    setQzhuliBindError('');
+    setQzhuliBindModalOpen(true);
+  }, [configLoaded, config.qzhuli.senderCid, config.qzhuli.convId, config.qzhuli.wsToken]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!imnutBindModalOpen || !imnutBindKey) {
+    if (!qzhuliBindModalOpen || !qzhuliBindKey) {
       setQzhuliBindQrDataUrl('');
       return;
     }
-    const payload = JSON.stringify({ type: 'imnut_bind', key: imnutBindKey, id: 2 });
+    const payload = JSON.stringify({ type: 'imnut_bind', key: qzhuliBindKey, id: 2 });
     void QRCode.toDataURL(payload, { width: 220, margin: 1 })
       .then((dataUrl) => {
         if (!cancelled) {
@@ -201,7 +201,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     return () => {
       cancelled = true;
     };
-  }, [imnutBindModalOpen, imnutBindKey]);
+  }, [qzhuliBindModalOpen, qzhuliBindKey]);
 
   // Save config on blur (only save current platform to avoid overwriting other platforms with defaults)
   const handleSaveConfig = async () => {
@@ -209,7 +209,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     await imService.updateConfig({ [activePlatform]: config[activePlatform] });
   };
 
-  const applyImnutModelConfigToCustomProvider = async (apiModelBaseUrl?: string, apiModelKey?: string) => {
+  const applyQzhuliModelConfigToCustomProvider = async (apiModelBaseUrl?: string, apiModelKey?: string) => {
     const nextBaseUrl = apiModelBaseUrl?.trim();
     const nextApiKey = apiModelKey?.trim();
     const maskedApiKey = nextApiKey ? `***${nextApiKey.slice(-4)}` : undefined;
@@ -231,7 +231,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
       },
     };
 
-    console.info('[IMSettings] Syncing IMNut model config to custom provider', {
+    console.info('[IMSettings] Syncing QZhuli model config to custom provider', {
       baseUrl: nextBaseUrl || '(keep current)',
       apiKey: maskedApiKey || '(keep current)',
       enabled: true,
@@ -245,9 +245,9 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
         baseUrl: updatedProviders.custom.baseUrl,
         apiKey: updatedProviders.custom.apiKey,
       });
-      console.info('[IMSettings] Synced IMNut model config to custom provider');
+      console.info('[IMSettings] Synced QZhuli model config to custom provider');
     } catch (error) {
-      console.error('[IMSettings] Failed to sync IMNut model config to custom provider', error);
+      console.error('[IMSettings] Failed to sync QZhuli model config to custom provider', error);
       throw error;
     }
   };
@@ -326,7 +326,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
   const telegramConnected = status.telegram?.connected ?? false;
   const discordConnected = status.discord?.connected ?? false;
   const nimConnected = status.nim?.connected ?? false;
-  const imnutConnected = status.imnut?.connected ?? false;
+  const qzhuliConnected = status.qzhuli?.connected ?? false;
 
   // Compute visible platforms based on language
   const platforms = useMemo<IMPlatform[]>(() => {
@@ -355,8 +355,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     if (platform === 'nim') {
       return !!(config.nim.appKey && config.nim.account && config.nim.token);
     }
-    if (platform === 'imnut') {
-      return !!(config.imnut.senderCid && config.imnut.convId && config.imnut.wsToken);
+    if (platform === 'qzhuli') {
+      return !!(config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken);
     }
     return !!(config.feishu.appId && config.feishu.appSecret);
   };
@@ -372,7 +372,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
     if (platform === 'telegram') return telegramConnected;
     if (platform === 'discord') return discordConnected;
     if (platform === 'nim') return nimConnected;
-    if (platform === 'imnut') return imnutConnected;
+    if (platform === 'qzhuli') return qzhuliConnected;
     return feishuConnected;
   };
 
@@ -390,28 +390,28 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
   };
 
   useEffect(() => {
-    if (!imnutBindModalOpen || !imnutBindKey) {
+    if (!qzhuliBindModalOpen || !qzhuliBindKey) {
       return;
     }
     let cancelled = false;
     const poll = async () => {
       try {
-        const result = await window.electron.im.getImnutBindStatus(imnutBindKey, config.imnut.environment);
+        const result = await window.electron.im.getQzhuliBindStatus(qzhuliBindKey, config.qzhuli.environment);
         if (cancelled) return;
         if (!result.success || !result.result) {
           if (result.error) {
-            setImnutBindError(result.error);
-            setImnutBindStatus('error');
+            setQzhuliBindError(result.error);
+            setQzhuliBindStatus('error');
           }
           return;
         }
         const compatResult = result.result as typeof result.result & { apiBaseUrl?: string; apiKey?: string };
         const apiModelBaseUrl = result.result.apiModelBaseUrl ?? compatResult.apiBaseUrl;
         const apiModelKey = result.result.apiModelKey ?? compatResult.apiKey;
-        await applyImnutModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
+        await applyQzhuliModelConfigToCustomProvider(apiModelBaseUrl, apiModelKey);
         if (result.result.status === 'bound' && result.result.convId && result.result.cid && result.result.token) {
           const nextConfig = {
-            ...config.imnut,
+            ...config.qzhuli,
             convId: result.result.convId,
             senderCid: result.result.cid,
             wsToken: result.result.token,
@@ -420,28 +420,28 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
             ...nextConfig,
             enabled: true,
           };
-          dispatch(setImnutConfig(enabledConfig));
-          await imService.updateConfig({ imnut: enabledConfig });
+          dispatch(setQzhuliConfig(enabledConfig));
+          await imService.updateConfig({ qzhuli: enabledConfig });
           dispatch(clearError());
-          const gatewayStarted = await imService.startGateway('imnut');
+          const gatewayStarted = await imService.startGateway('qzhuli');
           if (!gatewayStarted) {
-            dispatch(setImnutConfig({ enabled: false }));
-            await imService.updateConfig({ imnut: { ...enabledConfig, enabled: false } });
+            dispatch(setQzhuliConfig({ enabled: false }));
+            await imService.updateConfig({ qzhuli: { ...enabledConfig, enabled: false } });
           } else {
-            await runConnectivityTest('imnut', {
-              imnut: enabledConfig,
+            await runConnectivityTest('qzhuli', {
+              qzhuli: enabledConfig,
             });
           }
-          setImnutBindStatus('bound');
-          setImnutBindModalOpen(false);
-          onImnutBindCompleted?.();
+          setQzhuliBindStatus('bound');
+          setQzhuliBindModalOpen(false);
+          onQzhuliBindCompleted?.();
         } else {
-          setImnutBindStatus('pending');
+          setQzhuliBindStatus('pending');
         }
       } catch (error) {
         if (!cancelled) {
-          setImnutBindError(error instanceof Error ? error.message : 'Bind polling failed');
-          setImnutBindStatus('error');
+          setQzhuliBindError(error instanceof Error ? error.message : 'Bind polling failed');
+          setQzhuliBindStatus('error');
         }
       }
     };
@@ -453,7 +453,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
       cancelled = true;
       clearInterval(timer);
     };
-  }, [imnutBindModalOpen, imnutBindKey, config.imnut.environment, config.imnut, dispatch, onImnutBindCompleted]);
+  }, [qzhuliBindModalOpen, qzhuliBindKey, config.qzhuli.environment, config.qzhuli, dispatch, onQzhuliBindCompleted]);
 
   // Handle platform toggle
   const handlePlatformToggle = (platform: IMPlatform) => {
@@ -474,7 +474,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
       telegram: setTelegramConfig,
       discord: setDiscordConfig,
       nim: setNimConfig,
-      imnut: setImnutConfig,
+      qzhuli: setQzhuliConfig,
     };
     return actionMap[platform];
   };
@@ -929,8 +929,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
           </div>
         )}
 
-        {/* IMNut Settings */}
-        {activePlatform === 'imnut' && (
+        {/* QZhuli Settings */}
+        {activePlatform === 'qzhuli' && (
           <div className="space-y-3">
             <div className="space-y-1.5">
               <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
@@ -941,13 +941,13 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    void handleImnutEnvironmentChange('dev');
+                    void handleQzhuliEnvironmentChange('dev');
                   }}
                   onClick={() => {
-                    void handleImnutEnvironmentChange('dev');
+                    void handleQzhuliEnvironmentChange('dev');
                   }}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    config.imnut.environment === 'dev'
+                    config.qzhuli.environment === 'dev'
                       ? 'bg-claude-accent text-white'
                       : 'dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:text-claude-darkText text-claude-text'
                   }`}
@@ -958,13 +958,13 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    void handleImnutEnvironmentChange('release');
+                    void handleQzhuliEnvironmentChange('release');
                   }}
                   onClick={() => {
-                    void handleImnutEnvironmentChange('release');
+                    void handleQzhuliEnvironmentChange('release');
                   }}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    config.imnut.environment === 'release'
+                    config.qzhuli.environment === 'release'
                       ? 'bg-claude-accent text-white'
                       : 'dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:text-claude-darkText text-claude-text'
                   }`}
@@ -980,8 +980,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
               </label>
               <input
                 type="text"
-                value={config.imnut.convId}
-                onChange={(e) => handleImnutChange('convId', e.target.value)}
+                value={config.qzhuli.convId}
+                onChange={(e) => handleQzhuliChange('convId', e.target.value)}
                 onBlur={handleSaveConfig}
                 className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
                 placeholder="conv_xxx"
@@ -994,8 +994,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
               </label>
               <input
                 type="text"
-                value={config.imnut.senderCid}
-                onChange={(e) => handleImnutChange('senderCid', e.target.value)}
+                value={config.qzhuli.senderCid}
+                onChange={(e) => handleQzhuliChange('senderCid', e.target.value)}
                 onBlur={handleSaveConfig}
                 className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
                 placeholder="optional_sender_cid"
@@ -1008,8 +1008,8 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
               </label>
               <input
                 type="password"
-                value={config.imnut.wsToken}
-                onChange={(e) => handleImnutChange('wsToken', e.target.value)}
+                value={config.qzhuli.wsToken}
+                onChange={(e) => handleQzhuliChange('wsToken', e.target.value)}
                 onBlur={handleSaveConfig}
                 className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
                 placeholder="optional_ws_token"
@@ -1017,7 +1017,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
             </div>
 
             <p className="text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary">
-              {config.imnut.environment === 'release'
+              {config.qzhuli.environment === 'release'
                 ? 'Current host: im.qzhuli.com'
                 : 'Current host: test.im.qzhuli.com'}
             </p>
@@ -1026,7 +1026,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
               <button
                 type="button"
                 onClick={() => {
-                  void handleStartImnutBind();
+                  void handleStartQzhuliBind();
                 }}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors active:scale-[0.98]"
               >
@@ -1035,18 +1035,18 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
             </div>
 
             <div className="pt-1">
-              {renderConnectivityTestButton('imnut')}
+              {renderConnectivityTestButton('qzhuli')}
             </div>
 
-            {status.imnut?.lastWsUrl && (
+            {status.qzhuli?.lastWsUrl && (
               <div className="text-xs text-green-600 dark:text-green-400 bg-green-500/10 px-3 py-2 rounded-lg">
-                WS: {status.imnut?.lastWsUrl}
+                WS: {status.qzhuli?.lastWsUrl}
               </div>
             )}
 
-            {status.imnut?.lastError && (
+            {status.qzhuli?.lastError && (
               <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">
-                {status.imnut?.lastError}
+                {status.qzhuli?.lastError}
               </div>
             )}
           </div>
@@ -1133,10 +1133,10 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
           </div>
         )}
 
-        {imnutBindModalOpen && (
+        {qzhuliBindModalOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={handleCloseImnutBindModal}
+            onClick={handleCloseQzhuliBindModal}
           >
             <div
               className="w-full max-w-[360px] dark:bg-slate-900 bg-white rounded-2xl shadow-2xl border dark:border-slate-700/60 border-slate-200 overflow-hidden flex flex-col"
@@ -1152,7 +1152,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
                   <button
                     type="button"
                     aria-label={i18nService.t('close')}
-                    onClick={handleCloseImnutBindModal}
+                    onClick={handleCloseQzhuliBindModal}
                     className="flex items-center justify-center rounded-full size-7 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:text-slate-400 text-slate-500 transition-colors"
                   >
                     <XMarkIcon className="h-4 w-4" />
@@ -1191,12 +1191,12 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
 
                   {/* Status ping indicator */}
                   <div className="absolute -top-1 -right-1 flex h-3.5 w-3.5 z-10">
-                    {imnutBindStatus === 'bound' ? (
+                    {qzhuliBindStatus === 'bound' ? (
                       <>
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500" />
                       </>
-                    ) : imnutBindStatus === 'error' ? (
+                    ) : qzhuliBindStatus === 'error' ? (
                       <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500" />
                     ) : (
                       <>
@@ -1209,12 +1209,12 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced, onImnut
 
                 {/* Footer */}
                 <div className="mt-7 flex flex-col items-center gap-2">
-                  {imnutBindStatus === 'bound' ? (
+                  {qzhuliBindStatus === 'bound' ? (
                     <p className="text-sm font-medium text-green-600 dark:text-green-400">
                       已绑定成功 ✓
                     </p>
-                  ) : imnutBindError ? (
-                    <p className="text-sm text-red-500 dark:text-red-400">{imnutBindError}</p>
+                  ) : qzhuliBindError ? (
+                    <p className="text-sm text-red-500 dark:text-red-400">{qzhuliBindError}</p>
                   ) : (
                     <p className="text-sm font-medium dark:text-slate-200 text-slate-700">用Q助理扫一扫</p>
                   )}

@@ -12,7 +12,7 @@ import type {
   TelegramConfig,
   DiscordConfig,
   NimConfig,
-  ImnutConfig,
+  QzhuliConfig,
   IMSettings,
 } from '../../types/im';
 import {
@@ -48,7 +48,7 @@ const imSlice = createSlice({
         telegram: { ...DEFAULT_IM_CONFIG.telegram, ...(config.telegram || {}) },
         discord: { ...DEFAULT_IM_CONFIG.discord, ...(config.discord || {}) },
         nim: { ...DEFAULT_IM_CONFIG.nim, ...(config.nim || {}) },
-        imnut: { ...DEFAULT_IM_CONFIG.imnut, ...(config.imnut || {}) },
+        qzhuli: { ...DEFAULT_IM_CONFIG.qzhuli, ...(config.qzhuli || {}) },
         settings: { ...DEFAULT_IM_CONFIG.settings, ...(config.settings || {}) },
       };
     },
@@ -67,8 +67,8 @@ const imSlice = createSlice({
     setNimConfig: (state, action: PayloadAction<Partial<NimConfig>>) => {
       state.config.nim = { ...state.config.nim, ...action.payload };
     },
-    setImnutConfig: (state, action: PayloadAction<Partial<ImnutConfig>>) => {
-      state.config.imnut = { ...state.config.imnut, ...action.payload };
+    setQzhuliConfig: (state, action: PayloadAction<Partial<QzhuliConfig>>) => {
+      state.config.qzhuli = { ...state.config.qzhuli, ...action.payload };
     },
     setIMSettings: (state, action: PayloadAction<Partial<IMSettings>>) => {
       state.config.settings = { ...state.config.settings, ...action.payload };
@@ -83,7 +83,7 @@ const imSlice = createSlice({
         telegram: { ...DEFAULT_IM_STATUS.telegram, ...(status.telegram || {}) },
         discord: { ...DEFAULT_IM_STATUS.discord, ...(status.discord || {}) },
         nim: { ...DEFAULT_IM_STATUS.nim, ...(status.nim || {}) },
-        imnut: { ...DEFAULT_IM_STATUS.imnut, ...(status.imnut || {}) },
+        qzhuli: { ...DEFAULT_IM_STATUS.qzhuli, ...(status.qzhuli || {}) },
       };
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
@@ -105,7 +105,7 @@ export const {
   setTelegramConfig,
   setDiscordConfig,
   setNimConfig,
-  setImnutConfig,
+  setQzhuliConfig,
   setIMSettings,
   setStatus,
   setLoading,
