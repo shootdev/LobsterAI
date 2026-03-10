@@ -57,7 +57,21 @@
       "\\.map$",
       "\\.css$",
       "\\.html$",
-      "\\.js\\.map$"
+      "\\.js\\.map$",
+      "\\.ttf$",
+      "\\.woff$",
+      "\\.woff2$",
+      "\\.otf$",
+      "\\.eot$",
+      "\\.svg$",
+      "\\.png$",
+      "\\.jpg$",
+      "\\.jpeg$",
+      "\\.gif$",
+      "\\.ico$",
+      "\\.xml$",
+      "\\.yaml$",
+      "\\.yml$"
     ],
     "extendInfo": {
       "CFBundleIconName": "icon",
