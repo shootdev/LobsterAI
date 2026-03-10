@@ -47,8 +47,18 @@
     "category": "public.app-category.productivity",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
+    "notarize": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
+    "signIgnore": [
+      "\\.json$",
+      "\\.txt$",
+      "\\.md$",
+      "\\.map$",
+      "\\.css$",
+      "\\.html$",
+      "\\.js\\.map$"
+    ],
     "extendInfo": {
       "CFBundleIconName": "icon",
       "NSCalendarsUsageDescription": "Q助理电脑机器人 需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
