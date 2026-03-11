@@ -530,11 +530,7 @@ const getCoworkRunner = () => {
       const messageType = message?.type;
       const content = typeof message?.content === 'string' ? message.content.trim() : '';
       const isThinking = Boolean(message?.metadata?.isThinking);
-      const shouldSyncToQzhuli = (
-        (messageType === 'user' || messageType === 'assistant')
-        && content.length > 0
-        && !(messageType === 'assistant' && isThinking)
-      );
+      const shouldSyncToQzhuli = messageType === 'user' && content.length > 0;
 
       if (!shouldSyncToQzhuli) {
         return;
@@ -582,6 +578,40 @@ const getCoworkRunner = () => {
           }
         }
       });
+    });
+
+    coworkRunner.on('messageComplete', (sessionId: string, messageId: string, content: string) => {
+      const trimmedContent = content.trim();
+      if (!trimmedContent) return;
+
+      void (async () => {
+        try {
+          const imManager = getIMGatewayManager();
+          if (!imManager) {
+            console.info('[main] Skip QZhuli sync: IM gateway manager unavailable', { sessionId });
+            return;
+          }
+          const conversationId = imManager.getMappedConversationIdByCoworkSession(sessionId, 'qzhuli');
+          if (!conversationId) {
+            console.info('[main] Skip QZhuli sync: no mapped QZhuli conversation', { sessionId });
+            return;
+          }
+          if (imManager.isCoworkSessionProcessingFromIM(sessionId)) {
+            console.info('[main] Skip QZhuli sync: session currently processing IM inbound', { sessionId });
+            return;
+          }
+          const sent = await imManager.sendQzhuliConversationMessage(conversationId, trimmedContent);
+          console.info('[main] Cowork message sync to QZhuli completed', {
+            sessionId,
+            conversationId,
+            messageType: 'assistant',
+            sent,
+            contentLength: trimmedContent.length,
+          });
+        } catch (error) {
+          console.warn('[main] Failed to sync cowork message to QZhuli:', error);
+        }
+      })();
     });
 
     coworkRunner.on('permissionRequest', (sessionId: string, request: any) => {

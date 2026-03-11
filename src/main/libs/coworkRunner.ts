@@ -286,6 +286,7 @@ function mergeNoProxyList(currentValue: string | undefined, requiredHosts: strin
 export interface CoworkRunnerEvents {
   message: (sessionId: string, message: CoworkMessage) => void;
   messageUpdate: (sessionId: string, messageId: string, content: string) => void;
+  messageComplete: (sessionId: string, messageId: string, content: string) => void;
   permissionRequest: (sessionId: string, request: PermissionRequest) => void;
   complete: (sessionId: string, claudeSessionId: string | null) => void;
   error: (sessionId: string, error: string) => void;
@@ -4156,6 +4157,7 @@ export class CoworkRunner extends EventEmitter {
             metadata: { isStreaming: false },
           });
           this.emit('messageUpdate', sessionId, activeSession.currentStreamingMessageId, activeSession.currentStreamingContent);
+          this.emit('messageComplete', sessionId, activeSession.currentStreamingMessageId, activeSession.currentStreamingContent);
         }
         activeSession.currentStreamingMessageId = null;
         activeSession.currentStreamingContent = '';
@@ -4189,6 +4191,7 @@ export class CoworkRunner extends EventEmitter {
           metadata: { isStreaming: false },
         });
         this.emit('messageUpdate', sessionId, activeSession.currentStreamingMessageId, activeSession.currentStreamingContent);
+        this.emit('messageComplete', sessionId, activeSession.currentStreamingMessageId, activeSession.currentStreamingContent);
       }
       activeSession.currentStreamingMessageId = null;
       activeSession.currentStreamingContent = '';
@@ -4223,6 +4226,7 @@ export class CoworkRunner extends EventEmitter {
         metadata: { isStreaming: false },
       });
       this.emit('messageUpdate', sessionId, currentStreamingMessageId, currentStreamingContent);
+      this.emit('messageComplete', sessionId, currentStreamingMessageId, currentStreamingContent);
     }
     activeSession.currentStreamingMessageId = null;
     activeSession.currentStreamingContent = '';
@@ -4468,6 +4472,7 @@ export class CoworkRunner extends EventEmitter {
         metadata: { isFinal: true, isStreaming: false },
       });
       this.emit('messageUpdate', sessionId, activeSession.currentStreamingMessageId, finalContent);
+      this.emit('messageComplete', sessionId, activeSession.currentStreamingMessageId, finalContent);
 
       // 更新后立即重置状态，防止被后续事件重复处理
       activeSession.currentStreamingMessageId = null;
