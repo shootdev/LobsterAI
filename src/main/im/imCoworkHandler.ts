@@ -235,7 +235,8 @@ export class IMCoworkHandler extends EventEmitter {
   ): Promise<string> {
     // Create new Cowork session
     const config = this.coworkStore.getConfig();
-    const title = `IM-${platform}-${Date.now()}`;
+    const platformLabel = platform === 'qzhuli' ? '我的Q助理APP' : platform;
+    const title = `IM-${platformLabel}-${Date.now()}`;
     const systemPrompt = await this.buildSystemPromptWithSkills();
 
     const selectedWorkspaceRoot = (config.workingDirectory || '').trim();
