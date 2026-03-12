@@ -563,7 +563,6 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
   nim: DEFAULT_NIM_STATUS,
   qzhuli: DEFAULT_QZHULI_STATUS,
   xiaomifeng: DEFAULT_XIAOMIFENG_STATUS,
-  qq: DEFAULT_QQ_STATUS,
   wecom: DEFAULT_WECOM_STATUS,
 };
 

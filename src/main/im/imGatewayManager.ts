@@ -1382,6 +1382,13 @@ export class IMGatewayManager extends EventEmitter {
       return `QQ 鉴权通过（AccessToken 已获取）。`;
     }
 
+    if (platform === 'qzhuli') {
+      if (this.qzhuliGateway.isConnected()) {
+        return `QZhuli 连通（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}）。`;
+      }
+      return `QZhuli 配置已填写（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}，wsToken: 已配置）。`;
+    }
+
     return '未知平台。';
   }
 
@@ -1509,13 +1516,7 @@ export class IMGatewayManager extends EventEmitter {
         }
       }
     }
-    }
-    if (platform === 'qzhuli') {
-      if (this.qzhuliGateway.isConnected()) {
-        return `QZhuli 连通（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}）。`;
-      }
-      return `QZhuli 配置已填写（SenderCID: ${config.qzhuli.senderCid}，convId: ${config.qzhuli.convId}，wsToken: 已配置）。`;
-    }
+  }
 
   private resolveFeishuDomain(domain: string, Lark: any): any {
     if (domain === 'lark') return Lark.Domain.Lark;

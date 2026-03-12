@@ -546,7 +546,16 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, onUpda
     coworkConfig.memoryLlmJudgeEnabled,
   ]);
 
-  ], []);\n\n  useEffect(() => () => {\n    if (emailCopiedTimerRef.current != null) {\n      window.clearTimeout(emailCopiedTimerRef.current);\n    }\n    if (updateCheckTimerRef.current != null) {\n      window.clearTimeout(updateCheckTimerRef.current);\n    }\n  }, []);\n\n  const loadCoworkSandboxStatus = useCallback(async () => {
+  useEffect(() => () => {
+    if (emailCopiedTimerRef.current != null) {
+      window.clearTimeout(emailCopiedTimerRef.current);
+    }
+    if (updateCheckTimerRef.current != null) {
+      window.clearTimeout(updateCheckTimerRef.current);
+    }
+  }, []);
+
+  const loadCoworkSandboxStatus = useCallback(async () => {
     setCoworkSandboxLoading(true);
     try {
       const status = await coworkService.getSandboxStatus();
