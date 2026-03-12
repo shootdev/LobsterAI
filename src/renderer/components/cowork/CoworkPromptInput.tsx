@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { PaperAirplaneIcon, StopIcon, FolderIcon } from '@heroicons/react/24/solid';
-import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon } from '@heroicons/react/24/outline';
+import PaperClipIcon from '../icons/PaperClipIcon';
+import XMarkIcon from '../icons/XMarkIcon';
 import ModelSelector from '../ModelSelector';
 import FolderSelectorPopover from './FolderSelectorPopover';
 import { SkillsButton, ActiveSkillBadge } from '../skills';
@@ -11,14 +13,36 @@ import { RootState } from '../../store';
 import { setDraftPrompt } from '../../store/slices/coworkSlice';
 import { setSkills, toggleActiveSkill } from '../../store/slices/skillSlice';
 import { Skill } from '../../types/skill';
+import { CoworkImageAttachment } from '../../types/cowork';
 import { getCompactFolderName } from '../../utils/path';
 
 type CoworkAttachment = {
   path: string;
   name: string;
+  isImage?: boolean;
+  dataUrl?: string;
 };
 
 const INPUT_FILE_LABEL = '输入文件';
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
+
+const isImagePath = (filePath: string): boolean => {
+  const dotIndex = filePath.lastIndexOf('.');
+  if (dotIndex === -1) return false;
+  const ext = filePath.slice(dotIndex).toLowerCase();
+  return IMAGE_EXTENSIONS.has(ext);
+};
+
+const isImageMimeType = (mimeType: string): boolean => {
+  return mimeType.startsWith('image/');
+};
+
+const extractBase64FromDataUrl = (dataUrl: string): { mimeType: string; base64Data: string } | null => {
+  const match = /^data:(.+);base64,(.*)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mimeType: match[1], base64Data: match[2] };
+};
 
 const getFileNameFromPath = (path: string): string => {
   const parts = path.split(/[/\\]/);
@@ -55,7 +79,7 @@ export interface CoworkPromptInputRef {
 }
 
 interface CoworkPromptInputProps {
-  onSubmit: (prompt: string, skillPrompt?: string) => void;
+  onSubmit: (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => void;
   onStop?: () => void;
   isStreaming?: boolean;
   placeholder?: string;
@@ -90,6 +114,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     const [showFolderMenu, setShowFolderMenu] = useState(false);
     const [showFolderRequiredWarning, setShowFolderRequiredWarning] = useState(false);
     const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+    const [isAddingFile, setIsAddingFile] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const folderButtonRef = useRef<HTMLButtonElement>(null);
     const dragDepthRef = useRef(0);
@@ -173,7 +198,10 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
 
   useEffect(() => {
     if (value !== draftPrompt) {
-      dispatch(setDraftPrompt(value));
+      const timer = setTimeout(() => {
+        dispatch(setDraftPrompt(value));
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [value, draftPrompt, dispatch]);
 
@@ -195,14 +223,41 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
       ? activeSkills.map(buildInlinedSkillPrompt).join('\n\n')
       : undefined;
 
-    const attachmentLines = attachments.map((attachment) =>
-      `${INPUT_FILE_LABEL}: ${attachment.path}`
-    ).join('\n');
+    // Extract image attachments (with base64 data) for vision-capable models
+    const imageAtts: CoworkImageAttachment[] = [];
+    for (const attachment of attachments) {
+      if (attachment.isImage && attachment.dataUrl) {
+        const extracted = extractBase64FromDataUrl(attachment.dataUrl);
+        if (extracted) {
+          imageAtts.push({
+            name: attachment.name,
+            mimeType: extracted.mimeType,
+            base64Data: extracted.base64Data,
+          });
+        }
+      }
+    }
+
+    // Build prompt with ALL attachments that have real file paths (both regular files and images).
+    // Image attachments also need their file paths in the prompt so the model knows
+    // where the original files are located (e.g., for skills like seedream that need --image <path>).
+    // Note: inline/clipboard images have pseudo-paths starting with 'inline:' and are excluded.
+    const attachmentLines = attachments
+      .filter((a) => !a.path.startsWith('inline:'))
+      .map((attachment) => `${INPUT_FILE_LABEL}: ${attachment.path}`)
+      .join('\n');
     const finalPrompt = trimmedValue
       ? (attachmentLines ? `${trimmedValue}\n\n${attachmentLines}` : trimmedValue)
       : attachmentLines;
 
-    onSubmit(finalPrompt, skillPrompt);
+    if (imageAtts.length > 0) {
+      console.log('[CoworkPromptInput] handleSubmit: passing imageAtts to onSubmit', {
+        count: imageAtts.length,
+        names: imageAtts.map(a => a.name),
+        base64Lengths: imageAtts.map(a => a.base64Data.length),
+      });
+    }
+    onSubmit(finalPrompt, skillPrompt, imageAtts.length > 0 ? imageAtts : undefined);
     setValue('');
     dispatch(setDraftPrompt(''));
     setAttachments([]);
@@ -252,13 +307,50 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     }
   };
 
-  const addAttachment = useCallback((path: string) => {
-    if (!path) return;
+  const selectedModel = useSelector((state: RootState) => state.model.selectedModel);
+  const modelSupportsImage = !!selectedModel?.supportsImage;
+
+  const addAttachment = useCallback((filePath: string, imageInfo?: { isImage: boolean; dataUrl?: string }) => {
+    if (!filePath) return;
     setAttachments((prev) => {
-      if (prev.some((attachment) => attachment.path === path)) {
+      if (prev.some((attachment) => attachment.path === filePath)) {
         return prev;
       }
-      return [...prev, { path, name: getFileNameFromPath(path) }];
+      return [...prev, {
+        path: filePath,
+        name: getFileNameFromPath(filePath),
+        isImage: imageInfo?.isImage,
+        dataUrl: imageInfo?.dataUrl,
+      }];
+    });
+  }, []);
+
+  const addImageAttachmentFromDataUrl = useCallback((name: string, dataUrl: string) => {
+    // Use the dataUrl as the unique key (no file path for inline images)
+    const pseudoPath = `inline:${name}:${Date.now()}`;
+    setAttachments((prev) => {
+      return [...prev, {
+        path: pseudoPath,
+        name,
+        isImage: true,
+        dataUrl,
+      }];
+    });
+  }, []);
+
+  const fileToDataUrl = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result !== 'string') {
+          reject(new Error('Failed to read file'));
+          return;
+        }
+        resolve(result);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+      reader.readAsDataURL(file);
     });
   }, []);
 
@@ -316,6 +408,43 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
 
     for (const file of files) {
       const nativePath = getNativeFilePath(file);
+
+      // Check if this is an image file and model supports images
+      const fileIsImage = nativePath
+        ? isImagePath(nativePath)
+        : isImageMimeType(file.type);
+
+      if (fileIsImage && modelSupportsImage) {
+        // For images on vision-capable models, read as data URL
+        if (nativePath) {
+          try {
+            const result = await window.electron.dialog.readFileAsDataUrl(nativePath);
+            if (result.success && result.dataUrl) {
+              addAttachment(nativePath, { isImage: true, dataUrl: result.dataUrl });
+              continue;
+            }
+          } catch (error) {
+            console.error('Failed to read image as data URL:', error);
+          }
+          // Fallback: add as regular file attachment
+          addAttachment(nativePath);
+        } else {
+          // No native path (clipboard/drag from browser) - read via FileReader
+          try {
+            const dataUrl = await fileToDataUrl(file);
+            addImageAttachmentFromDataUrl(file.name, dataUrl);
+          } catch (error) {
+            console.error('Failed to read image from clipboard:', error);
+            const stagedPath = await saveInlineFile(file);
+            if (stagedPath) {
+              addAttachment(stagedPath);
+            }
+          }
+        }
+        continue;
+      }
+
+      // Non-image file or model doesn't support images: use original flow
       if (nativePath) {
         addAttachment(nativePath);
         continue;
@@ -326,20 +455,36 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         addAttachment(stagedPath);
       }
     }
-  }, [addAttachment, disabled, getNativeFilePath, isStreaming, saveInlineFile]);
+  }, [addAttachment, addImageAttachmentFromDataUrl, disabled, fileToDataUrl, getNativeFilePath, isStreaming, modelSupportsImage, saveInlineFile]);
 
   const handleAddFile = useCallback(async () => {
+    if (isAddingFile || disabled || isStreaming) return;
+    setIsAddingFile(true);
     try {
-      const result = await window.electron.dialog.selectFile({
+      const result = await window.electron.dialog.selectFiles({
         title: i18nService.t('coworkAddFile'),
       });
-      if (result.success && result.path) {
-        addAttachment(result.path);
+      if (!result.success || result.paths.length === 0) return;
+      for (const filePath of result.paths) {
+        if (isImagePath(filePath) && modelSupportsImage) {
+          try {
+            const readResult = await window.electron.dialog.readFileAsDataUrl(filePath);
+            if (readResult.success && readResult.dataUrl) {
+              addAttachment(filePath, { isImage: true, dataUrl: readResult.dataUrl });
+              continue;
+            }
+          } catch (error) {
+            console.error('Failed to read image as data URL:', error);
+          }
+        }
+        addAttachment(filePath);
       }
     } catch (error) {
       console.error('Failed to select file:', error);
+    } finally {
+      setIsAddingFile(false);
     }
-  }, [addAttachment]);
+  }, [addAttachment, isAddingFile, disabled, isStreaming, modelSupportsImage]);
 
   const handleRemoveAttachment = useCallback((path: string) => {
     setAttachments((prev) => prev.filter((attachment) => attachment.path !== path));
@@ -411,7 +556,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                 className="inline-flex items-center gap-1.5 rounded-full border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurface bg-claude-surface px-2.5 py-1 text-xs dark:text-claude-darkText text-claude-text max-w-full"
                 title={attachment.path}
               >
-                <PaperClipIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                {attachment.isImage ? (
+                  <PhotoIcon className="h-3.5 w-3.5 flex-shrink-0 text-blue-500" />
+                ) : (
+                  <PaperClipIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                )}
                 <span className="truncate max-w-[180px]">{attachment.name}</span>
                 <button
                   type="button"
@@ -490,7 +639,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                   className="flex items-center justify-center p-1.5 rounded-lg text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover dark:hover:text-claude-darkText hover:text-claude-text transition-colors"
                   title={i18nService.t('coworkAddFile')}
                   aria-label={i18nService.t('coworkAddFile')}
-                  disabled={disabled || isStreaming}
+                  disabled={disabled || isStreaming || isAddingFile}
                 >
                   <PaperClipIcon className="h-4 w-4" />
                 </button>
@@ -545,7 +694,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                 className="flex-shrink-0 p-1.5 rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover dark:hover:text-claude-darkText hover:text-claude-text transition-colors"
                 title={i18nService.t('coworkAddFile')}
                 aria-label={i18nService.t('coworkAddFile')}
-                disabled={disabled || isStreaming}
+                disabled={disabled || isStreaming || isAddingFile}
               >
                 <PaperClipIcon className="h-4 w-4" />
               </button>

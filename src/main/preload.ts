@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld('electron', {
       return () => ipcRenderer.removeListener('skills:changed', handler);
     },
   },
+  mcp: {
+    list: () => ipcRenderer.invoke('mcp:list'),
+    create: (data: any) => ipcRenderer.invoke('mcp:create', data),
+    update: (id: string, data: any) => ipcRenderer.invoke('mcp:update', id, data),
+    delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
+    setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('mcp:setEnabled', options),
+    fetchMarketplace: () => ipcRenderer.invoke('mcp:fetchMarketplace'),
+  },
   permissions: {
     checkCalendar: () => ipcRenderer.invoke('permissions:checkCalendar'),
     requestCalendar: () => ipcRenderer.invoke('permissions:requestCalendar'),
@@ -102,7 +110,7 @@ contextBridge.exposeInMainWorld('electron', {
     },
   },
   getApiConfig: () => ipcRenderer.invoke('get-api-config'),
-  checkApiConfig: () => ipcRenderer.invoke('check-api-config'),
+  checkApiConfig: (options?: { probeModel?: boolean }) => ipcRenderer.invoke('check-api-config', options),
   saveApiConfig: (config: { apiKey: string; baseURL: string; model: string; apiType?: 'anthropic' | 'openai' }) =>
     ipcRenderer.invoke('save-api-config', config),
   generateSessionTitle: (userInput: string | null) =>
@@ -111,14 +119,16 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('get-recent-cwds', limit),
   cowork: {
     // Session management
-    startSession: (options: { prompt: string; cwd?: string; systemPrompt?: string; activeSkillIds?: string[] }) =>
+    startSession: (options: { prompt: string; cwd?: string; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) =>
       ipcRenderer.invoke('cowork:session:start', options),
-    continueSession: (options: { sessionId: string; prompt: string; systemPrompt?: string; activeSkillIds?: string[] }) =>
+    continueSession: (options: { sessionId: string; prompt: string; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) =>
       ipcRenderer.invoke('cowork:session:continue', options),
     stopSession: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:stop', sessionId),
     deleteSession: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:delete', sessionId),
+    deleteSessions: (sessionIds: string[]) =>
+      ipcRenderer.invoke('cowork:session:deleteBatch', sessionIds),
     setSessionPinned: (options: { sessionId: string; pinned: boolean }) =>
       ipcRenderer.invoke('cowork:session:pin', options),
     renameSession: (options: { sessionId: string; title: string }) =>
@@ -217,8 +227,12 @@ contextBridge.exposeInMainWorld('electron', {
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
     selectFile: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) =>
       ipcRenderer.invoke('dialog:selectFile', options),
+    selectFiles: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) =>
+      ipcRenderer.invoke('dialog:selectFiles', options),
     saveInlineFile: (options: { dataBase64: string; fileName?: string; mimeType?: string; cwd?: string }) =>
       ipcRenderer.invoke('dialog:saveInlineFile', options),
+    readFileAsDataUrl: (filePath: string) =>
+      ipcRenderer.invoke('dialog:readFileAsDataUrl', filePath),
   },
   shell: {
     openPath: (filePath: string) => ipcRenderer.invoke('shell:openPath', filePath),
@@ -247,6 +261,7 @@ contextBridge.exposeInMainWorld('electron', {
   log: {
     getPath: () => ipcRenderer.invoke('log:getPath'),
     openFolder: () => ipcRenderer.invoke('log:openFolder'),
+    exportZip: () => ipcRenderer.invoke('log:exportZip'),
   },
   im: {
     // Configuration
@@ -254,10 +269,10 @@ contextBridge.exposeInMainWorld('electron', {
     setConfig: (config: any) => ipcRenderer.invoke('im:config:set', config),
 
     // Gateway control
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => ipcRenderer.invoke('im:gateway:start', platform),
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli') => ipcRenderer.invoke('im:gateway:stop', platform),
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => ipcRenderer.invoke('im:gateway:start', platform),
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => ipcRenderer.invoke('im:gateway:stop', platform),
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli',
+      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli',
       configOverride?: any
     ) => ipcRenderer.invoke('im:gateway:test', platform, configOverride),
 

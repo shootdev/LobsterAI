@@ -9,10 +9,13 @@ import type {
   IMGatewayStatus,
   DingTalkConfig,
   FeishuConfig,
+  QQConfig,
   TelegramConfig,
   DiscordConfig,
   NimConfig,
   QzhuliConfig,
+  XiaomifengConfig,
+  WecomConfig,
   IMSettings,
 } from '../../types/im';
 import {
@@ -58,6 +61,9 @@ const imSlice = createSlice({
     setFeishuConfig: (state, action: PayloadAction<Partial<FeishuConfig>>) => {
       state.config.feishu = { ...state.config.feishu, ...action.payload };
     },
+    setQQConfig: (state, action: PayloadAction<Partial<QQConfig>>) => {
+      state.config.qq = { ...state.config.qq, ...action.payload };
+    },
     setTelegramConfig: (state, action: PayloadAction<Partial<TelegramConfig>>) => {
       state.config.telegram = { ...state.config.telegram, ...action.payload };
     },
@@ -69,6 +75,12 @@ const imSlice = createSlice({
     },
     setQzhuliConfig: (state, action: PayloadAction<Partial<QzhuliConfig>>) => {
       state.config.qzhuli = { ...state.config.qzhuli, ...action.payload };
+    },
+    setXiaomifengConfig: (state, action: PayloadAction<Partial<XiaomifengConfig>>) => {
+      state.config.xiaomifeng = { ...state.config.xiaomifeng, ...action.payload };
+    },
+    setWecomConfig: (state, action: PayloadAction<Partial<WecomConfig>>) => {
+      state.config.wecom = { ...state.config.wecom, ...action.payload };
     },
     setIMSettings: (state, action: PayloadAction<Partial<IMSettings>>) => {
       state.config.settings = { ...state.config.settings, ...action.payload };
@@ -102,10 +114,13 @@ export const {
   setConfig,
   setDingTalkConfig,
   setFeishuConfig,
+  setQQConfig,
   setTelegramConfig,
   setDiscordConfig,
   setNimConfig,
   setQzhuliConfig,
+  setXiaomifengConfig,
+  setWecomConfig,
   setIMSettings,
   setStatus,
   setLoading,

@@ -225,7 +225,10 @@ class IMService {
       || status.telegram.connected
       || status.discord.connected
       || status.nim.connected
-      || status.qzhuli.connected;
+      || status.qzhuli.connected
+      || status.xiaomifeng.connected
+      || status.qq.connected
+      || status.wecom.connected;
   }
 }
 

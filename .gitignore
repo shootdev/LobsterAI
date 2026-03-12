@@ -15,6 +15,7 @@ __pycache__/
 sandbox/image/out/
 sandbox/image/publish/
 sandbox/image/.work/
+.work/
 sandbox/runtime/out/
 sandbox/runtime-darwin-*/
 
@@ -22,6 +23,8 @@ sandbox/runtime-darwin-*/
 resources/mingit/
 resources/MinGit-*.zip
 resources/PortableGit-*.7z.exe
+resources/python-win/
+resources/python-*.zip
 
 # SKILLs runtime files
 SKILLs/**/.connection
@@ -38,3 +41,6 @@ nul
 .cowork-temp/
 
 scratch/
+
+# editorconfig files
+.vscode/

@@ -8,6 +8,7 @@ import WindowTitleBar from './components/window/WindowTitleBar';
 import { CoworkView } from './components/cowork';
 import { SkillsView } from './components/skills';
 import { ScheduledTasksView } from './components/scheduledTasks';
+import { McpView } from './components/mcp';
 import CoworkPermissionModal from './components/cowork/CoworkPermissionModal';
 import CoworkQuestionWizard from './components/cowork/CoworkQuestionWizard';
 import { configService } from './services/config';
@@ -15,7 +16,7 @@ import { apiService } from './services/api';
 import { themeService } from './services/theme';
 import { coworkService } from './services/cowork';
 import { scheduledTaskService } from './services/scheduledTask';
-import { checkForAppUpdate, type AppUpdateInfo, type AppUpdateDownloadProgress, UPDATE_POLL_INTERVAL_MS } from './services/appUpdate';
+import { checkForAppUpdate, type AppUpdateInfo, type AppUpdateDownloadProgress, UPDATE_POLL_INTERVAL_MS, UPDATE_HEARTBEAT_INTERVAL_MS } from './services/appUpdate';
 import { defaultConfig } from './config';
 import { setAvailableModels, setSelectedModel } from './store/slices/modelSlice';
 import { clearSelection } from './store/slices/quickActionSlice';
@@ -30,7 +31,7 @@ import AppUpdateModal from './components/update/AppUpdateModal';
 const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsOptions, setSettingsOptions] = useState<SettingsOpenOptions>({});
-  const [mainView, setMainView] = useState<'cowork' | 'skills' | 'scheduledTasks'>('cowork');
+  const [mainView, setMainView] = useState<'cowork' | 'skills' | 'scheduledTasks' | 'mcp'>('cowork');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -81,7 +82,7 @@ const App: React.FC = () => {
         apiService.setConfig(apiConfig);
 
         // 从 providers 配置中加载可用模型列表到 Redux
-        const providerModels: { id: string; name: string; provider?: string; supportsImage?: boolean }[] = [];
+        const providerModels: { id: string; name: string; provider?: string; providerKey?: string; supportsImage?: boolean }[] = [];
         if (config.providers) {
           Object.entries(config.providers).forEach(([providerName, providerConfig]) => {
             if (providerConfig.enabled && providerConfig.models) {
@@ -90,6 +91,7 @@ const App: React.FC = () => {
                   id: model.id,
                   name: model.name,
                   provider: providerName.charAt(0).toUpperCase() + providerName.slice(1),
+                  providerKey: providerName,
                   supportsImage: model.supportsImage ?? false,
                 });
               });
@@ -99,12 +101,16 @@ const App: React.FC = () => {
         const fallbackModels = config.model.availableModels.map(model => ({
           id: model.id,
           name: model.name,
+          providerKey: undefined,
           supportsImage: model.supportsImage ?? false,
         }));
         const resolvedModels = providerModels.length > 0 ? providerModels : fallbackModels;
         if (resolvedModels.length > 0) {
           dispatch(setAvailableModels(resolvedModels));
-          const preferredModel = resolvedModels.find(model => model.id === config.model.defaultModel) ?? resolvedModels[0];
+          const preferredModel = resolvedModels.find(
+            model => model.id === config.model.defaultModel
+              && (!config.model.defaultModelProvider || model.providerKey === config.model.defaultModelProvider)
+          ) ?? resolvedModels[0];
           dispatch(setSelectedModel(preferredModel));
         }
         
@@ -155,14 +161,20 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isInitialized || !selectedModel?.id) return;
     const config = configService.getConfig();
-    if (config.model.defaultModel === selectedModel.id) return;
+    if (
+      config.model.defaultModel === selectedModel.id
+      && (config.model.defaultModelProvider ?? '') === (selectedModel.providerKey ?? '')
+    ) {
+      return;
+    }
     void configService.updateConfig({
       model: {
         ...config.model,
         defaultModel: selectedModel.id,
+        defaultModelProvider: selectedModel.providerKey,
       },
     });
-  }, [isInitialized, selectedModel?.id]);
+  }, [isInitialized, selectedModel?.id, selectedModel?.providerKey]);
 
   const handleShowSettings = useCallback((options?: SettingsOpenOptions) => {
     setSettingsOptions({
@@ -212,6 +224,10 @@ const App: React.FC = () => {
 
   const handleShowScheduledTasks = useCallback(() => {
     setMainView('scheduledTasks');
+  }, []);
+
+  const handleShowMcp = useCallback(() => {
+    setMainView('mcp');
   }, []);
 
   const handleToggleSidebar = useCallback(() => {
@@ -267,6 +283,14 @@ const App: React.FC = () => {
     setDownloadProgress(null);
     setShowUpdateModal(true);
   }, [updateInfo]);
+
+  const handleUpdateFound = useCallback((info: AppUpdateInfo) => {
+    setUpdateInfo(info);
+    setUpdateModalState('info');
+    setUpdateError(null);
+    setDownloadProgress(null);
+    setShowUpdateModal(true);
+  }, []);
 
   const handleConfirmUpdate = useCallback(async () => {
     if (!updateInfo) return;
@@ -354,7 +378,7 @@ const App: React.FC = () => {
     });
 
     if (config.providers) {
-      const allModels: { id: string; name: string; provider?: string; supportsImage?: boolean }[] = [];
+      const allModels: { id: string; name: string; provider?: string; providerKey?: string; supportsImage?: boolean }[] = [];
       Object.entries(config.providers).forEach(([providerName, providerConfig]) => {
         if (providerConfig.enabled && providerConfig.models) {
           providerConfig.models.forEach((model: { id: string; name: string; supportsImage?: boolean }) => {
@@ -362,6 +386,7 @@ const App: React.FC = () => {
               id: model.id,
               name: model.name,
               provider: providerName.charAt(0).toUpperCase() + providerName.slice(1),
+              providerKey: providerName,
               supportsImage: model.supportsImage ?? false,
             });
           });
@@ -462,20 +487,36 @@ const App: React.FC = () => {
     if (!isInitialized) return;
 
     let cancelled = false;
+    let lastCheckTime = 0;
 
-    const checkUpdate = async () => {
+    const maybeCheck = async () => {
       if (cancelled) return;
+      const now = Date.now();
+      if (lastCheckTime > 0 && now - lastCheckTime < UPDATE_POLL_INTERVAL_MS) return;
+      lastCheckTime = now;
       await runUpdateCheck();
     };
 
-    void checkUpdate();
+    // 启动时立即检查
+    void maybeCheck();
+
+    // 心跳：每 30 分钟检测是否距上次检查已超过 12 小时
     const timer = window.setInterval(() => {
-      void checkUpdate();
-    }, UPDATE_POLL_INTERVAL_MS);
+      void maybeCheck();
+    }, UPDATE_HEARTBEAT_INTERVAL_MS);
+
+    // 窗口恢复可见时检测（覆盖休眠唤醒场景）
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void maybeCheck();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isInitialized, runUpdateCheck]);
 
@@ -562,6 +603,7 @@ const App: React.FC = () => {
               onClose={handleCloseSettings}
               initialTab={settingsOptions.initialTab}
               notice={settingsOptions.notice}
+              onUpdateFound={handleUpdateFound}
             />
           )}
         </div>
@@ -582,13 +624,14 @@ const App: React.FC = () => {
           onShowSkills={handleShowSkills}
           onShowCowork={handleShowCowork}
           onShowScheduledTasks={handleShowScheduledTasks}
+          onShowMcp={handleShowMcp}
           onNewChat={handleNewChat}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={handleToggleSidebar}
           updateBadge={!isSidebarCollapsed ? updateBadge : null}
         />
         <div className={`flex-1 min-w-0 py-1.5 pr-1.5 ${isSidebarCollapsed ? 'pl-1.5' : ''}`}>
-          <div className="h-full rounded-xl dark:bg-claude-darkBg bg-claude-bg overflow-hidden">
+          <div className="h-full min-h-0 rounded-xl dark:bg-claude-darkBg bg-claude-bg overflow-hidden">
             {mainView === 'skills' ? (
               <SkillsView
                 isSidebarCollapsed={isSidebarCollapsed}
@@ -598,6 +641,13 @@ const App: React.FC = () => {
               />
             ) : mainView === 'scheduledTasks' ? (
               <ScheduledTasksView
+                isSidebarCollapsed={isSidebarCollapsed}
+                onToggleSidebar={handleToggleSidebar}
+                onNewChat={handleNewChat}
+                updateBadge={isSidebarCollapsed ? updateBadge : null}
+              />
+            ) : mainView === 'mcp' ? (
+              <McpView
                 isSidebarCollapsed={isSidebarCollapsed}
                 onToggleSidebar={handleToggleSidebar}
                 onNewChat={handleNewChat}
@@ -623,6 +673,7 @@ const App: React.FC = () => {
           onClose={handleCloseSettings}
           initialTab={settingsOptions.initialTab}
           notice={settingsOptions.notice}
+          onUpdateFound={handleUpdateFound}
         />
       )}
       {showUpdateModal && updateInfo && (
