@@ -6,7 +6,7 @@
     "email": "lobsterai.project@rd.netease.com"
   },
   "license": "MIT",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "dist-electron/main.js",
   "engines": {
     "node": ">=24 <25"
@@ -86,6 +86,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dompurify": "^3.0.5",
     "@types/extract-zip": "^2.0.1",
