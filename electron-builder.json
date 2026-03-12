@@ -24,13 +24,7 @@
     {
       "from": "SKILLs",
       "to": "SKILLs",
-      "filter": [
-        "**/*",
-        "!**/.env",
-        "!**/.env.*",
-        "!**/.venv",
-        "!**/.venv/**"
-      ]
+      "filter": ["**/*", "!**/.env", "!**/.env.*", "!**/.venv", "!**/.venv/**"]
     },
     {
       "from": "resources/tray",
@@ -41,9 +35,7 @@
     }
   ],
   "mac": {
-    "target": [
-      "dmg"
-    ],
+    "target": ["dmg"],
     "icon": "build/icons/mac/icon.icns",
     "category": "public.app-category.productivity",
     "hardenedRuntime": true,
