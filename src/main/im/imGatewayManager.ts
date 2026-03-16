@@ -29,6 +29,7 @@ import {
   IMConnectivityCheck,
   IMConnectivityTestResult,
   IMConnectivityVerdict,
+  QzhuliMessageRole,
 } from './types';
 import type { Database } from 'sql.js';
 import type { CoworkRunner } from '../libs/coworkRunner';
@@ -1099,26 +1100,33 @@ export class IMGatewayManager extends EventEmitter {
     return this.coworkHandler?.isSessionProcessing(sessionId) ?? false;
   }
 
-  async sendQzhuliConversationMessage(conversationId: string, text: string): Promise<boolean> {
+  async sendQzhuliConversationMessage(
+    conversationId: string,
+    text: string,
+    roleType: QzhuliMessageRole = 'assistant'
+  ): Promise<boolean> {
     if (!this.isConnected('qzhuli')) {
       console.warn('[IMGatewayManager] Cannot send QZhuli conversation message: qzhuli is not connected', {
         conversationId,
         textLength: text.length,
+        roleType,
       });
       return false;
     }
 
     try {
-      await this.qzhuliGateway.sendToConversation(conversationId, text);
+      await this.qzhuliGateway.sendToConversation(conversationId, text, roleType);
       console.info('[IMGatewayManager] Sent QZhuli conversation message', {
         conversationId,
         textLength: text.length,
+        roleType,
       });
       return true;
     } catch (error: any) {
       console.error('[IMGatewayManager] Failed to send QZhuli conversation message:', error.message, {
         conversationId,
         textLength: text.length,
+        roleType,
       });
       return false;
     }

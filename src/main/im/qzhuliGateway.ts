@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import {
   QzhuliConfig,
   QzhuliGatewayStatus,
+  QzhuliMessageRole,
   IMMessage,
   DEFAULT_QZHULI_STATUS,
 } from './types';
@@ -28,6 +29,10 @@ function resolveQzhuliHost(config: QzhuliConfig): string {
 
 function getQzhuliBaseUrl(config: QzhuliConfig): string {
   return `https://${resolveQzhuliHost(config)}`;
+}
+
+function getQzhuliRoleCode(roleType: QzhuliMessageRole): number {
+  return roleType === 'user' ? 1 : 0;
 }
 
 /**
@@ -205,15 +210,19 @@ export class QzhuliGateway extends EventEmitter {
     if (!convId) {
       throw new Error('No QZhuli conversation available yet');
     }
-    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
+    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined, 'assistant');
   }
 
-  async sendToConversation(conversationId: string, text: string): Promise<void> {
+  async sendToConversation(
+    conversationId: string,
+    text: string,
+    roleType: QzhuliMessageRole = 'assistant'
+  ): Promise<void> {
     const convId = (conversationId || '').trim();
     if (!convId) {
       throw new Error('QZhuli conversationId is required');
     }
-    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined);
+    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined, roleType);
   }
 
   private startHeartbeat(): void {
@@ -321,13 +330,18 @@ export class QzhuliGateway extends EventEmitter {
 
     if (this.onMessageCallback) {
       await this.onMessageCallback(message, async (replyText: string) => {
-        await this.pushMessage(convId, replyText, senderCid || undefined);
+        await this.pushMessage(convId, replyText, senderCid || undefined, 'assistant');
       });
     }
     this.emit('message', message);
   }
 
-  private async pushMessage(convId: string, text: string, senderCid?: string): Promise<void> {
+  private async pushMessage(
+    convId: string,
+    text: string,
+    senderCid?: string,
+    roleType: QzhuliMessageRole = 'assistant'
+  ): Promise<void> {
     if (!this.config) {
       throw new Error('QZhuli config missing');
     }
@@ -336,6 +350,7 @@ export class QzhuliGateway extends EventEmitter {
       conv_id: convId,
       content: text,
       msg_type: DEFAULT_MSG_TYPE,
+      role: getQzhuliRoleCode(roleType),
     };
     if (senderCid || this.config.senderCid) {
       payload.sender_cid = senderCid || this.config.senderCid;

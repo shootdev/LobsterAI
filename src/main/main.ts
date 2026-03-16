@@ -273,8 +273,10 @@ const savePngWithDialog = async (
 };
 
 const configureUserDataPath = (): void => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
   const appDataPath = app.getPath('appData');
-  const preferredUserDataPath = path.join(appDataPath, APP_NAME);
+  const userDataDirName = isDevelopment ? `${APP_NAME}-dev` : APP_NAME;
+  const preferredUserDataPath = path.join(appDataPath, userDataDirName);
   const currentUserDataPath = app.getPath('userData');
 
   if (currentUserDataPath !== preferredUserDataPath) {
@@ -616,7 +618,7 @@ const getCoworkRunner = () => {
             console.info('[main] Skip QZhuli sync: session currently processing IM inbound', { sessionId, messageType });
             return;
           }
-          const sent = await imManager.sendQzhuliConversationMessage(conversationId, content);
+          const sent = await imManager.sendQzhuliConversationMessage(conversationId, content, 'user');
           console.info('[main] Cowork message sync to QZhuli completed', {
             sessionId,
             conversationId,
@@ -664,7 +666,7 @@ const getCoworkRunner = () => {
             console.info('[main] Skip QZhuli sync: session currently processing IM inbound', { sessionId });
             return;
           }
-          const sent = await imManager.sendQzhuliConversationMessage(conversationId, trimmedContent);
+          const sent = await imManager.sendQzhuliConversationMessage(conversationId, trimmedContent, 'assistant');
           console.info('[main] Cowork message sync to QZhuli completed', {
             sessionId,
             conversationId,
@@ -991,11 +993,13 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (_event, commandLine, workingDirectory) => {
     console.log('[Main] second-instance event', { commandLine, workingDirectory });
-    // 如果尝试启动第二个实例，则聚焦到主窗口
-    if (mainWindow) {
+    // 如果尝试启动第二个实例，则聚焦到主窗口；若窗口不存在则重建。
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       if (!mainWindow.isFocused()) mainWindow.focus();
+    } else {
+      createWindow();
     }
   });
 

@@ -178,6 +178,8 @@ export interface QzhuliGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+export type QzhuliMessageRole = 'assistant' | 'user';
+
 // ==================== Xiaomifeng (小蜜蜂) Types ====================
 
 export interface XiaomifengConfig {
