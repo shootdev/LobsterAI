@@ -107,7 +107,7 @@
     "icon": "build/icons/png",
     "category": "Utility",
     "desktop": {
-      "Name": "LobsterAI",
+      "Name": "Q助理电脑机器人",
       "Comment": "AI-assisted coding and productivity tool",
       "Terminal": "false"
     }
