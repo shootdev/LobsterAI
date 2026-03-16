@@ -20,6 +20,7 @@ const DEFAULT_QZHULI_HOST_RELEASE = 'im.qzhuli.com';
 const DEFAULT_PUSH_PATH = '/api/v1/conversations/push_message';
 const DEFAULT_WS_URL_PATH = '/wss_openclaw';
 const DEFAULT_MSG_TYPE = 1;
+const DEFAULT_PUSH_TIMEOUT_MS = 30_000;
 const DEFAULT_RECONNECT_MS = 2_000;
 const DEFAULT_MAX_RECONNECT_MS = 30_000;
 
@@ -206,11 +207,11 @@ export class QzhuliGateway extends EventEmitter {
   }
 
   async sendNotification(text: string): Promise<void> {
-    const convId = (this.lastConvId || this.config?.convId || '').trim();
+    const convId = (this.config?.convId || this.lastConvId || '').trim();
     if (!convId) {
       throw new Error('No QZhuli conversation available yet');
     }
-    await this.pushMessage(convId, text, this.lastSenderCid || this.config?.senderCid || undefined, 'assistant');
+    await this.pushMessage(convId, text, this.config?.senderCid || this.lastSenderCid || undefined, 'assistant');
   }
 
   async sendToConversation(
@@ -357,7 +358,7 @@ export class QzhuliGateway extends EventEmitter {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_PUSH_TIMEOUT_MS);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -382,9 +383,12 @@ export class QzhuliGateway extends EventEmitter {
       this.status.lastError = null;
       this.emit('status');
     } catch (error: any) {
-      this.status.lastError = error.message;
+      const errorMessage = error?.name === 'AbortError'
+        ? `QZhuli push request timed out after ${DEFAULT_PUSH_TIMEOUT_MS}ms`
+        : error.message;
+      this.status.lastError = errorMessage;
       this.emit('status');
-      throw error;
+      throw new Error(errorMessage);
     } finally {
       clearTimeout(timeout);
     }

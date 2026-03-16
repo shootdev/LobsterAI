@@ -820,6 +820,15 @@ const getScheduledTaskStore = () => {
   return scheduledTaskStore;
 };
 
+const normalizeScheduledTaskNotifyPlatforms = (notifyPlatforms: unknown): string[] => {
+  if (Array.isArray(notifyPlatforms) && notifyPlatforms.length > 0) {
+    return Array.from(new Set(notifyPlatforms.filter((platform): platform is string => typeof platform === 'string' && platform.trim().length > 0)));
+  }
+
+  const qzhuliEnabled = getIMGatewayManager()?.getConfig().qzhuli.enabled ?? false;
+  return qzhuliEnabled ? ['qzhuli'] : [];
+};
+
 const getScheduler = () => {
   if (!scheduler) {
     scheduler = new Scheduler({
@@ -1827,6 +1836,7 @@ if (!gotTheLock) {
         ? normalizedInput.workingDirectory
         : coworkConfig.workingDirectory;
       normalizedInput.workingDirectory = resolveExistingTaskWorkingDirectory(candidateWorkingDirectory);
+      normalizedInput.notifyPlatforms = normalizeScheduledTaskNotifyPlatforms(normalizedInput.notifyPlatforms);
 
       const task = getScheduledTaskStore().createTask(normalizedInput);
       getScheduler().reschedule();
@@ -1850,6 +1860,9 @@ if (!gotTheLock) {
         ? (normalizedInput.workingDirectory.trim() || existingTask.workingDirectory || coworkConfig.workingDirectory)
         : (existingTask.workingDirectory || coworkConfig.workingDirectory);
       normalizedInput.workingDirectory = resolveExistingTaskWorkingDirectory(candidateWorkingDirectory);
+      if (Object.prototype.hasOwnProperty.call(normalizedInput, 'notifyPlatforms')) {
+        normalizedInput.notifyPlatforms = normalizeScheduledTaskNotifyPlatforms(normalizedInput.notifyPlatforms);
+      }
 
       const task = scheduledTaskStore.updateTask(id, normalizedInput);
       getScheduler().reschedule();

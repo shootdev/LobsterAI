@@ -263,6 +263,9 @@ export class Scheduler {
     const imManager = this.getIMGatewayManager?.();
     if (!imManager) return;
 
+    const notifyPlatforms = this.resolveNotifyPlatforms(task, imManager);
+    if (notifyPlatforms.length === 0) return;
+
     const status = success ? '✅ 成功' : '❌ 失败';
     const durationStr = durationMs < 1000
       ? `${durationMs}ms`
@@ -299,16 +302,29 @@ export class Scheduler {
       message += `\n\n📝 执行结果:\n${resultSnippet}`;
     }
 
-    for (const platform of task.notifyPlatforms) {
+    for (const platform of notifyPlatforms) {
       try {
         // Use sendNotificationWithMedia to support media files in AI reply
-        await imManager.sendNotificationWithMedia(platform, message);
-        console.log(`[Scheduler] Notification sent via ${platform} for task ${task.id}`);
+        const sent = await imManager.sendNotificationWithMedia(platform, message);
+        if (sent) {
+          console.log(`[Scheduler] Notification sent via ${platform} for task ${task.id}`);
+        } else {
+          console.warn(`[Scheduler] Notification was not delivered via ${platform} for task ${task.id}`);
+        }
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.warn(`[Scheduler] Failed to send notification via ${platform}: ${errMsg}`);
       }
     }
+  }
+
+  private resolveNotifyPlatforms(task: ScheduledTask, imManager: IMGatewayManager): NotifyPlatform[] {
+    if (Array.isArray(task.notifyPlatforms) && task.notifyPlatforms.length > 0) {
+      return task.notifyPlatforms;
+    }
+
+    const qzhuliEnabled = imManager.getConfig().qzhuli.enabled;
+    return qzhuliEnabled ? ['qzhuli'] : [];
   }
 
   // --- Manual Execution ---

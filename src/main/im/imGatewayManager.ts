@@ -1100,13 +1100,23 @@ export class IMGatewayManager extends EventEmitter {
     return this.coworkHandler?.isSessionProcessing(sessionId) ?? false;
   }
 
+  private canSendQzhuliPush(): boolean {
+    const config = this.getConfig().qzhuli;
+    return Boolean(
+      config.enabled
+      && config.senderCid?.trim()
+      && config.convId?.trim()
+      && config.wsToken?.trim()
+    );
+  }
+
   async sendQzhuliConversationMessage(
     conversationId: string,
     text: string,
     roleType: QzhuliMessageRole = 'assistant'
   ): Promise<boolean> {
-    if (!this.isConnected('qzhuli')) {
-      console.warn('[IMGatewayManager] Cannot send QZhuli conversation message: qzhuli is not connected', {
+    if (!this.canSendQzhuliPush()) {
+      console.warn('[IMGatewayManager] Cannot send QZhuli conversation message: qzhuli push is not configured', {
         conversationId,
         textLength: text.length,
         roleType,
@@ -1138,7 +1148,11 @@ export class IMGatewayManager extends EventEmitter {
    * Returns true if successfully sent, false if platform not connected.
    */
   async sendNotification(platform: IMPlatform, text: string): Promise<boolean> {
-    if (!this.isConnected(platform)) {
+    if (platform === 'qzhuli' && !this.canSendQzhuliPush()) {
+      console.warn('[IMGatewayManager] Cannot send notification: qzhuli push is not configured');
+      return false;
+    }
+    if (platform !== 'qzhuli' && !this.isConnected(platform)) {
       console.warn(`[IMGatewayManager] Cannot send notification: ${platform} is not connected`);
       return false;
     }
@@ -1171,7 +1185,11 @@ export class IMGatewayManager extends EventEmitter {
   }
 
   async sendNotificationWithMedia(platform: IMPlatform, text: string): Promise<boolean> {
-    if (!this.isConnected(platform)) {
+    if (platform === 'qzhuli' && !this.canSendQzhuliPush()) {
+      console.warn('[IMGatewayManager] Cannot send notification: qzhuli push is not configured');
+      return false;
+    }
+    if (platform !== 'qzhuli' && !this.isConnected(platform)) {
       console.warn(`[IMGatewayManager] Cannot send notification: ${platform} is not connected`);
       return false;
     }
@@ -1187,6 +1205,8 @@ export class IMGatewayManager extends EventEmitter {
         await this.discordGateway.sendNotificationWithMedia(text);
       } else if (platform === 'nim') {
         await this.nimGateway.sendNotificationWithMedia(text);
+      } else if (platform === 'qzhuli') {
+        await this.qzhuliGateway.sendNotification(text);
       } else if (platform === 'qq') {
         await this.qqGateway.sendNotificationWithMedia(text);
       } else if (platform === 'wecom') {

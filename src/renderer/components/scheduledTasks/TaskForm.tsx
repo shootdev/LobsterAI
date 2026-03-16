@@ -119,6 +119,14 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, onCancel, onSaved }) =>
     void imService.init();
   }, []);
 
+  useEffect(() => {
+    if (mode !== 'create' || task) return;
+    if (!visiblePlatforms.includes('qzhuli')) return;
+    if (!(imConfig.qzhuli?.enabled)) return;
+
+    setNotifyPlatforms((current) => (current.length === 0 ? ['qzhuli'] : current));
+  }, [imConfig.qzhuli?.enabled, mode, task, visiblePlatforms]);
+
   // Clean up selected platforms when visible list changes
   useEffect(() => {
     setNotifyPlatforms(prev => prev.filter(p => visiblePlatforms.includes(p)));
