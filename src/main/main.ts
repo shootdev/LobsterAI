@@ -14,7 +14,7 @@ import { generateSessionTitle, probeCoworkModelReadiness } from './libs/coworkUt
 import { ensureSandboxReady, getSandboxStatus, onSandboxProgress } from './libs/coworkSandboxRuntime';
 import { startCoworkOpenAICompatProxy, stopCoworkOpenAICompatProxy, setScheduledTaskDeps } from './libs/coworkOpenAICompatProxy';
 import { IMGatewayManager, IMPlatform, IMGatewayConfig } from './im';
-import { APP_NAME } from './appConstants';
+import { APP_CONFIG_PATH, APP_ID, APP_NAME } from './appConstants';
 import { getSkillServiceManager } from './skillServices';
 import { createTray, destroyTray, updateTrayMenu } from './trayManager';
 import { isAutoLaunched, getAutoLaunchEnabled, setAutoLaunchEnabled } from './autoLaunchManager';
@@ -275,7 +275,8 @@ const savePngWithDialog = async (
 const configureUserDataPath = (): void => {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const appDataPath = app.getPath('appData');
-  const userDataDirName = isDevelopment ? `${APP_NAME}-dev` : APP_NAME;
+  // Keep userData path ASCII-only to avoid runtime issues on some toolchains.
+  const userDataDirName = isDevelopment ? `${APP_CONFIG_PATH}-dev` : APP_CONFIG_PATH;
   const preferredUserDataPath = path.join(appDataPath, userDataDirName);
   const currentUserDataPath = app.getPath('userData');
 
