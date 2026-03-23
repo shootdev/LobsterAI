@@ -47,7 +47,6 @@ const App: React.FC = () => {
   const [privacyAgreed, setPrivacyAgreed] = useState<boolean | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const hasInitialized = useRef(false);
-  const hasCheckedQzhuliConfig = useRef(false);
   const dispatch = useDispatch();
   const selectedModel = useSelector((state: RootState) => state.model.selectedModel);
   const currentSessionId = useSelector((state: RootState) => state.cowork.currentSessionId);
@@ -221,36 +220,6 @@ const App: React.FC = () => {
     });
     setShowSettings(true);
   }, []);
-
-  useEffect(() => {
-    if (hasCheckedQzhuliConfig.current) {
-      return;
-    }
-    hasCheckedQzhuliConfig.current = true;
-    let cancelled = false;
-    const checkQzhuliConfig = async () => {
-      try {
-        const result = await window.electron.im.getConfig();
-        if (cancelled || !result.success || !result.config) {
-          return;
-        }
-        const hasQzhuliConfig = !!(
-          result.config.qzhuli.senderCid
-          && result.config.qzhuli.convId
-          && result.config.qzhuli.wsToken
-        );
-        if (!hasQzhuliConfig) {
-          handleShowSettings({ initialTab: 'im' });
-        }
-      } catch (error) {
-        console.warn('[App] Failed to check QZhuli config on startup:', error);
-      }
-    };
-    void checkQzhuliConfig();
-    return () => {
-      cancelled = true;
-    };
-  }, [handleShowSettings]);
 
   const handleShowSkills = useCallback(() => {
     setMainView('skills');

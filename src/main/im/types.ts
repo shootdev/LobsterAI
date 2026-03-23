@@ -177,6 +177,35 @@ export interface NimGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+// ==================== QZhuli Types ====================
+
+export interface QzhuliConfig {
+  enabled: boolean;
+  environment: 'dev' | 'release';
+  convId: string;
+  senderCid: string;
+  wsToken: string;
+  /** Optional. Sent as X-OpenClaw-Token header (via WS subprotocol) when the
+   *  server has OpenClawWSToken configured. */
+  openClawToken?: string;
+  reconnectMs: number;
+  maxReconnectMs: number;
+  maxReconnectAttempts: number;
+  heartbeatMs: number;
+  debug?: boolean;
+}
+
+export interface QzhuliGatewayStatus {
+  connected: boolean;
+  startedAt: number | null;
+  lastError: string | null;
+  lastWsUrl: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+}
+
+export type QzhuliMessageRole = 'assistant' | 'user';
+
 // ==================== Xiaomifeng (小蜜蜂) Types ====================
 
 export interface XiaomifengConfig {
@@ -299,7 +328,7 @@ export interface WeixinGatewayStatus {
 
 // ==================== Common IM Types ====================
 
-export type IMPlatform = 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin';
+export type IMPlatform = 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin';
 
 export interface IMGatewayConfig {
   dingtalk: DingTalkOpenClawConfig;
@@ -308,6 +337,7 @@ export interface IMGatewayConfig {
   qq: QQOpenClawConfig;
   discord: DiscordOpenClawConfig;
   nim: NimConfig;
+  qzhuli: QzhuliConfig;
   xiaomifeng: XiaomifengConfig;
   wecom: WecomOpenClawConfig;
   popo: PopoOpenClawConfig;
@@ -327,6 +357,7 @@ export interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
+  qzhuli: QzhuliGatewayStatus;
   xiaomifeng: XiaomifengGatewayStatus;
   wecom: WecomGatewayStatus;
   popo: PopoGatewayStatus;
@@ -507,6 +538,19 @@ export const DEFAULT_XIAOMIFENG_CONFIG: XiaomifengConfig = {
   debug: true,
 };
 
+export const DEFAULT_QZHULI_CONFIG: QzhuliConfig = {
+  enabled: false,
+  environment: 'dev',
+  convId: '',
+  senderCid: '',
+  wsToken: '',
+  reconnectMs: 2000,
+  maxReconnectMs: 30000,
+  maxReconnectAttempts: 0,
+  heartbeatMs: 25000,
+  debug: true,
+};
+
 export const DEFAULT_TELEGRAM_OPENCLAW_CONFIG: TelegramOpenClawConfig = {
   enabled: false,
   botToken: '',
@@ -593,6 +637,7 @@ export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
   qq: DEFAULT_QQ_CONFIG,
   discord: DEFAULT_DISCORD_OPENCLAW_CONFIG,
   nim: DEFAULT_NIM_CONFIG,
+  qzhuli: DEFAULT_QZHULI_CONFIG,
   xiaomifeng: DEFAULT_XIAOMIFENG_CONFIG,
   wecom: DEFAULT_WECOM_CONFIG,
   popo: DEFAULT_POPO_CONFIG,
@@ -632,6 +677,15 @@ export const DEFAULT_NIM_STATUS: NimGatewayStatus = {
   startedAt: null,
   lastError: null,
   botAccount: null,
+  lastInboundAt: null,
+  lastOutboundAt: null,
+};
+
+export const DEFAULT_QZHULI_STATUS: QzhuliGatewayStatus = {
+  connected: false,
+  startedAt: null,
+  lastError: null,
+  lastWsUrl: null,
   lastInboundAt: null,
   lastOutboundAt: null,
 };
@@ -692,6 +746,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
   qq: DEFAULT_QQ_STATUS,
   discord: DEFAULT_DISCORD_STATUS,
   nim: DEFAULT_NIM_STATUS,
+  qzhuli: DEFAULT_QZHULI_STATUS,
   xiaomifeng: DEFAULT_XIAOMIFENG_STATUS,
   wecom: DEFAULT_WECOM_STATUS,
   popo: DEFAULT_POPO_STATUS,
