@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
-import { clearCurrentSession, setCurrentSession, setStreaming } from '../../store/slices/coworkSlice';
+import { addMessage, clearCurrentSession, setCurrentSession, setStreaming, updateSessionStatus } from '../../store/slices/coworkSlice';
 import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
 import { setActions, selectAction, clearSelection } from '../../store/slices/quickActionSlice';
 import { coworkService } from '../../services/cowork';
@@ -13,10 +13,11 @@ import CoworkSessionDetail from './CoworkSessionDetail';
 import ModelSelector from '../ModelSelector';
 import SidebarToggleIcon from '../icons/SidebarToggleIcon';
 import ComposeIcon from '../icons/ComposeIcon';
+import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import WindowTitleBar from '../window/WindowTitleBar';
 import { QuickActionBar, PromptPanel } from '../quick-actions';
 import type { SettingsOpenOptions } from '../Settings';
-import type { CoworkSession, CoworkImageAttachment } from '../../types/cowork';
+import type { CoworkSession, CoworkImageAttachment, OpenClawEngineStatus } from '../../types/cowork';
 
 export interface CoworkViewProps {
   onRequestAppSettings?: (options?: SettingsOpenOptions) => void;
@@ -31,6 +32,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const dispatch = useDispatch();
   const isMac = window.electron.platform === 'darwin';
   const [isInitialized, setIsInitialized] = useState(false);
+  const [openClawStatus, setOpenClawStatus] = useState<OpenClawEngineStatus | null>(null);
+  const [isRestartingGateway, setIsRestartingGateway] = useState(false);
   // Track if we're starting a session to prevent duplicate submissions
   const isStartingRef = useRef(false);
   // Track pending start request so stop can cancel delayed startup.
@@ -44,6 +47,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     isStreaming,
     config,
   } = useSelector((state: RootState) => state.cowork);
+  const isOpenClawEngine = config.agentEngine !== 'yd_cowork';
 
   const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
   const skills = useSelector((state: RootState) => state.skill.skills);
@@ -65,9 +69,48 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     return `${baseNotice} (${error})`;
   };
 
+  const resolveEngineStatusText = (status: OpenClawEngineStatus): string => {
+    switch (status.phase) {
+      case 'not_installed':
+        return i18nService.t('coworkOpenClawNotInstalledNotice');
+      case 'installing':
+        return i18nService.t('coworkOpenClawInstalling');
+      case 'ready':
+        return i18nService.t('coworkOpenClawReadyNotice');
+      case 'starting':
+        return i18nService.t('coworkOpenClawStarting');
+      case 'error':
+        return i18nService.t('coworkOpenClawError');
+      case 'running':
+      default:
+        return i18nService.t('coworkOpenClawRunning');
+    }
+  };
+
+  const isOpenClawReadyForSession = (status: OpenClawEngineStatus | null): boolean => {
+    if (!status) return false;
+    return status.phase === 'running' || status.phase === 'ready';
+  };
+
+  const handleRestartGateway = async () => {
+    if (isRestartingGateway) return;
+    setIsRestartingGateway(true);
+    try {
+      await coworkService.restartOpenClawGateway();
+    } catch (error) {
+      console.error('[CoworkView] Failed to restart gateway:', error);
+    } finally {
+      setIsRestartingGateway(false);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       await coworkService.init();
+      const initialEngineStatus = await coworkService.getOpenClawEngineStatus();
+      if (initialEngineStatus) {
+        setOpenClawStatus(initialEngineStatus);
+      }
       // Load quick actions with localization
       try {
         quickActionService.initialize();
@@ -92,6 +135,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     };
     init();
 
+    const unsubscribeOpenClawStatus = coworkService.onOpenClawEngineStatus((status) => {
+      setOpenClawStatus(status);
+    });
+
     // Subscribe to language changes to reload quick actions
     const unsubscribe = quickActionService.subscribe(async () => {
       try {
@@ -104,10 +151,15 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
     return () => {
       unsubscribe();
+      unsubscribeOpenClawStatus();
     };
   }, [dispatch]);
 
-  const handleStartSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => {
+  const handleStartSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]): Promise<boolean | void> => {
+    if (isOpenClawEngine && openClawStatus && !isOpenClawReadyForSession(openClawStatus)) {
+      window.dispatchEvent(new CustomEvent('app:showToast', { detail: i18nService.t('coworkErrorEngineNotReady') }));
+      return false;
+    }
     // Prevent duplicate submissions
     if (isStartingRef.current) return;
     isStartingRef.current = true;
@@ -189,7 +241,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         .join('\n\n') || undefined;
 
       // Start the actual session immediately with fallback title
-      const startedSession = await coworkService.startSession({
+      const { session: startedSession, error: startError } = await coworkService.startSession({
         prompt,
         title: fallbackTitle,
         cwd: config.workingDirectory || undefined,
@@ -197,6 +249,21 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         activeSkillIds: sessionSkillIds,
         imageAttachments,
       });
+
+      if (!startedSession && startError) {
+        // Show the error as a system message in the temp session
+        dispatch(addMessage({
+          sessionId: tempSessionId,
+          message: {
+            id: `error-${Date.now()}`,
+            type: 'system',
+            content: i18nService.t('coworkErrorSessionStartFailed').replace('{error}', startError),
+            timestamp: Date.now(),
+          },
+        }));
+        dispatch(updateSessionStatus({ sessionId: tempSessionId, status: 'error' }));
+        return;
+      }
 
       // Generate title in the background and update when ready
       if (startedSession) {
@@ -224,6 +291,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
   const handleContinueSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => {
     if (!currentSession) return;
+    if (isOpenClawEngine && openClawStatus && !isOpenClawReadyForSession(openClawStatus)) {
+      window.dispatchEvent(new CustomEvent('app:showToast', { detail: i18nService.t('coworkErrorEngineNotReady') }));
+      return false;
+    }
 
     console.log('[CoworkView] handleContinueSession called', {
       hasImageAttachments: !!imageAttachments,
@@ -317,6 +388,21 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     };
   }, [dispatch]);
 
+  useEffect(() => {
+    if (!isOpenClawEngine) return;
+    if (!currentSession || currentSession.status !== 'running') return;
+
+    const runningSessionId = currentSession.id;
+    const handleWindowFocus = () => {
+      void coworkService.loadSession(runningSessionId);
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [currentSession?.id, currentSession?.status, isOpenClawEngine]);
+
   if (!isInitialized) {
     return (
       <div className="flex-1 h-full flex flex-col dark:bg-claude-darkBg bg-claude-bg">
@@ -332,10 +418,79 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     );
   }
 
+  const shouldShowEngineStatus = Boolean(isOpenClawEngine && openClawStatus && openClawStatus.phase !== 'running');
+  const isEngineError = openClawStatus?.phase === 'error';
+  const isEngineReady = isOpenClawEngine
+    ? isOpenClawReadyForSession(openClawStatus)
+    : true;
+
+  const homeHeader = (
+    <div className="draggable flex h-12 items-center justify-between px-4 border-b dark:border-claude-darkBorder border-claude-border shrink-0">
+      <div className="non-draggable h-8 flex items-center">
+        {isSidebarCollapsed && (
+          <div className={`flex items-center gap-1 mr-2 ${isMac ? 'pl-[68px]' : ''}`}>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
+            >
+              <SidebarToggleIcon className="h-4 w-4" isCollapsed={true} />
+            </button>
+            <button
+              type="button"
+              onClick={onNewChat}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
+            >
+              <ComposeIcon className="h-4 w-4" />
+            </button>
+            {updateBadge}
+          </div>
+        )}
+        <ModelSelector />
+      </div>
+      <div className="non-draggable flex items-center">
+        <div className="flex items-center gap-1.5 mr-2 px-2.5 py-1">
+          <ShieldCheckIcon className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          <span className="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">
+            {i18nService.t('lobsterGuardEnabled')}
+          </span>
+        </div>
+        <WindowTitleBar inline />
+      </div>
+    </div>
+  );
+
+  // Engine status banner for error/non-running states (starting overlay is now global in App.tsx)
+  const engineStatusBanner = shouldShowEngineStatus && openClawStatus && openClawStatus.phase !== 'starting' ? (
+    <div className={`shrink-0 flex items-center justify-between px-4 py-2 text-xs ${isEngineError
+      ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+    }`}>
+      <div className="flex items-center gap-2">
+        <span>{resolveEngineStatusText(openClawStatus)}</span>
+        {typeof openClawStatus.progressPercent === 'number' && (
+          <span className="opacity-70">({Math.round(openClawStatus.progressPercent)}%)</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={handleRestartGateway}
+        disabled={isRestartingGateway}
+        className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isEngineError
+          ? 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600'
+          : 'bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600'
+        }`}
+      >
+        {i18nService.t('coworkOpenClawRestartGateway')}
+      </button>
+    </div>
+  ) : null;
+
   // When there's a current session, show the session detail view
   if (currentSession) {
     return (
-      <>
+      <div className="flex-1 flex flex-col h-full">
+        {engineStatusBanner}
         <CoworkSessionDetail
           onManageSkills={() => onShowSkills?.()}
           onContinue={handleContinueSession}
@@ -346,39 +501,18 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           onNewChat={onNewChat}
           updateBadge={updateBadge}
         />
-      </>
+      </div>
     );
   }
 
   // Home view - no current session
   return (
     <div className="flex-1 flex flex-col dark:bg-claude-darkBg bg-claude-bg h-full">
+      {/* Engine status banner for error states */}
+      {engineStatusBanner}
+
       {/* Header */}
-      <div className="draggable flex h-12 items-center justify-between px-4 border-b dark:border-claude-darkBorder border-claude-border shrink-0">
-        <div className="non-draggable h-8 flex items-center">
-          {isSidebarCollapsed && (
-            <div className={`flex items-center gap-1 mr-2 ${isMac ? 'pl-[68px]' : ''}`}>
-              <button
-                type="button"
-                onClick={onToggleSidebar}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
-              >
-                <SidebarToggleIcon className="h-4 w-4" isCollapsed={true} />
-              </button>
-              <button
-                type="button"
-                onClick={onNewChat}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
-              >
-                <ComposeIcon className="h-4 w-4" />
-              </button>
-              {updateBadge}
-            </div>
-          )}
-          <ModelSelector />
-        </div>
-        <WindowTitleBar inline />
-      </div>
+      {homeHeader}
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -402,6 +536,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
                 onSubmit={handleStartSession}
                 onStop={handleStopSession}
                 isStreaming={isStreaming}
+                disabled={!isEngineReady}
                 placeholder={i18nService.t('coworkPlaceholder')}
                 size="large"
                 workingDirectory={config.workingDirectory}

@@ -7,17 +7,16 @@ node_modules
 dist
 dist-electron
 .DS_Store
-.idea/
 .env 
 .claude/
 __pycache__/
 .codebuddy/
-sandbox/image/out/
-sandbox/image/publish/
-sandbox/image/.work/
 .work/
-sandbox/runtime/out/
-sandbox/runtime-darwin-*/
+vendor/openclaw-runtime/
+vendor/openclaw-plugins/
+
+# Tar archives generated during Windows packaging
+build-tar/
 
 # Bundled PortableGit for Windows builds (downloaded via scripts/setup-mingit.js)
 resources/mingit/
@@ -40,7 +39,11 @@ nul
 .playwright-mcp/
 .cowork-temp/
 
-scratch/
-
 # editorconfig files
 .vscode/
+
+sandbox/
+
+# Accidentally committed git hook files outside git-hooks/
+**/**/post-commit
+openspec/

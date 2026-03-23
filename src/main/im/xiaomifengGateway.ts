@@ -261,6 +261,13 @@ export class XiaomifengGateway extends EventEmitter {
   }
 
   /**
+   * Check whether the native SDK instance is instantiated.
+   */
+  isRunning(): boolean {
+    return this.v2Client !== null;
+  }
+
+  /**
    * Check if gateway has a pending reconnection timer
    */
   isReconnecting(): boolean {
@@ -970,6 +977,14 @@ export class XiaomifengGateway extends EventEmitter {
     }
 
     await this.sendBeeReply(this.lastConversation.conversationId, text);
+    this.status.lastOutboundAt = Date.now();
+  }
+
+  async sendConversationNotification(conversationId: string, text: string): Promise<void> {
+    if (!conversationId) {
+      throw new Error('No conversation available for notification');
+    }
+    await this.sendBeeReply(conversationId, text);
     this.status.lastOutboundAt = Date.now();
   }
 

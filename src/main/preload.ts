@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electron', {
     setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('skills:setEnabled', options),
     delete: (id: string) => ipcRenderer.invoke('skills:delete', id),
     download: (source: string) => ipcRenderer.invoke('skills:download', source),
+    confirmInstall: (pendingId: string, action: string) =>
+      ipcRenderer.invoke('skills:confirmInstall', pendingId, action),
     getRoot: () => ipcRenderer.invoke('skills:getRoot'),
     autoRoutingPrompt: () => ipcRenderer.invoke('skills:autoRoutingPrompt'),
     getConfig: (skillId: string) => ipcRenderer.invoke('skills:getConfig', skillId),
@@ -33,6 +35,7 @@ contextBridge.exposeInMainWorld('electron', {
     delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
     setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('mcp:setEnabled', options),
     fetchMarketplace: () => ipcRenderer.invoke('mcp:fetchMarketplace'),
+    refreshBridge: () => ipcRenderer.invoke('mcp:refreshBridge'),
   },
   permissions: {
     checkCalendar: () => ipcRenderer.invoke('permissions:checkCalendar'),
@@ -117,6 +120,19 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.invoke('generate-session-title', userInput),
   getRecentCwds: (limit?: number) =>
     ipcRenderer.invoke('get-recent-cwds', limit),
+  openclaw: {
+    engine: {
+      getStatus: () => ipcRenderer.invoke('openclaw:engine:getStatus'),
+      install: () => ipcRenderer.invoke('openclaw:engine:install'),
+      retryInstall: () => ipcRenderer.invoke('openclaw:engine:retryInstall'),
+      restartGateway: () => ipcRenderer.invoke('openclaw:engine:restartGateway'),
+      onProgress: (callback: (status: any) => void) => {
+        const handler = (_event: any, status: any) => callback(status);
+        ipcRenderer.on('openclaw:engine:onProgress', handler);
+        return () => ipcRenderer.removeListener('openclaw:engine:onProgress', handler);
+      },
+    },
+  },
   cowork: {
     // Session management
     startSession: (options: { prompt: string; cwd?: string; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) =>
@@ -135,6 +151,8 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('cowork:session:rename', options),
     getSession: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:get', sessionId),
+    remoteManaged: (sessionId: string) =>
+      ipcRenderer.invoke('cowork:session:remoteManaged', sessionId),
     listSessions: () =>
       ipcRenderer.invoke('cowork:session:list'),
     exportResultImage: (options: { rect: { x: number; y: number; width: number; height: number }; defaultFileName?: string }) =>
@@ -154,6 +172,7 @@ contextBridge.exposeInMainWorld('electron', {
     setConfig: (config: {
       workingDirectory?: string;
       executionMode?: 'auto' | 'local' | 'sandbox';
+      agentEngine?: 'openclaw' | 'yd_cowork';
       memoryEnabled?: boolean;
       memoryImplicitUpdateEnabled?: boolean;
       memoryLlmJudgeEnabled?: boolean;
@@ -187,15 +206,10 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('cowork:memory:deleteEntry', input),
     getMemoryStats: () =>
       ipcRenderer.invoke('cowork:memory:getStats'),
-    getSandboxStatus: () =>
-      ipcRenderer.invoke('cowork:sandbox:status'),
-    installSandbox: () =>
-      ipcRenderer.invoke('cowork:sandbox:install'),
-    onSandboxDownloadProgress: (callback: (data: any) => void) => {
-      const handler = (_event: any, data: any) => callback(data);
-      ipcRenderer.on('cowork:sandbox:downloadProgress', handler);
-      return () => ipcRenderer.removeListener('cowork:sandbox:downloadProgress', handler);
-    },
+    readBootstrapFile: (filename: string) =>
+      ipcRenderer.invoke('cowork:bootstrap:read', filename),
+    writeBootstrapFile: (filename: string, content: string) =>
+      ipcRenderer.invoke('cowork:bootstrap:write', filename, content),
     // Stream event listeners
     onStreamMessage: (callback: (data: { sessionId: string; message: any }) => void) => {
       const handler = (_event: any, data: { sessionId: string; message: any }) => callback(data);
@@ -222,6 +236,11 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('cowork:stream:error', handler);
       return () => ipcRenderer.removeListener('cowork:stream:error', handler);
     },
+    onSessionsChanged: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('cowork:sessions:changed', handler);
+      return () => ipcRenderer.removeListener('cowork:sessions:changed', handler);
+    },
   },
   dialog: {
     selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
@@ -246,7 +265,6 @@ contextBridge.exposeInMainWorld('electron', {
   appInfo: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getSystemLocale: () => ipcRenderer.invoke('app:getSystemLocale'),
-    quit: () => ipcRenderer.invoke('app:quit'),
   },
   appUpdate: {
     download: (url: string) => ipcRenderer.invoke('appUpdate:download', url),
@@ -266,20 +284,32 @@ contextBridge.exposeInMainWorld('electron', {
   im: {
     // Configuration
     getConfig: () => ipcRenderer.invoke('im:config:get'),
-    setConfig: (config: any) => ipcRenderer.invoke('im:config:set', config),
+    setConfig: (config: any, options?: { syncGateway?: boolean }) => ipcRenderer.invoke('im:config:set', config, options),
+    syncConfig: () => ipcRenderer.invoke('im:config:sync'),
 
     // Gateway control
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => ipcRenderer.invoke('im:gateway:start', platform),
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => ipcRenderer.invoke('im:gateway:stop', platform),
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:start', platform),
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:stop', platform),
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli',
+      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
       configOverride?: any
     ) => ipcRenderer.invoke('im:gateway:test', platform, configOverride),
 
     // Status
     getStatus: () => ipcRenderer.invoke('im:status:get'),
-    getQzhuliBindStatus: (key: string, environment: 'dev' | 'release') =>
-      ipcRenderer.invoke('im:qzhuli:bindStatus', key, environment),
+    getLocalIp: () => ipcRenderer.invoke('im:getLocalIp') as Promise<string>,
+    // OpenClaw config schema
+    getOpenClawConfigSchema: () => ipcRenderer.invoke('im:openclaw:config-schema'),
+
+
+    // Weixin QR login
+    weixinQrLoginStart: () => ipcRenderer.invoke('im:weixin:qr-login-start'),
+    weixinQrLoginWait: (accountId?: string) => ipcRenderer.invoke('im:weixin:qr-login-wait', accountId),
+
+    // Pairing
+    listPairingRequests: (platform: string) => ipcRenderer.invoke('im:pairing:list', platform),
+    approvePairingCode: (platform: string, code: string) => ipcRenderer.invoke('im:pairing:approve', platform, code),
+    rejectPairingRequest: (platform: string, code: string) => ipcRenderer.invoke('im:pairing:reject', platform, code),
 
     // Event listeners
     onStatusChange: (callback: (status: any) => void) => {
@@ -312,6 +342,11 @@ contextBridge.exposeInMainWorld('electron', {
     countRuns: (taskId: string) => ipcRenderer.invoke('scheduledTask:countRuns', taskId),
     listAllRuns: (limit?: number, offset?: number) =>
       ipcRenderer.invoke('scheduledTask:listAllRuns', limit, offset),
+    resolveSession: (sessionKey: string) =>
+      ipcRenderer.invoke('scheduledTask:resolveSession', sessionKey),
+
+    // Delivery channels
+    listChannels: () => ipcRenderer.invoke('scheduledTask:listChannels'),
 
     // Stream event listeners
     onStatusUpdate: (callback: (data: any) => void) => {
@@ -324,8 +359,37 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('scheduledTask:runUpdate', handler);
       return () => ipcRenderer.removeListener('scheduledTask:runUpdate', handler);
     },
+    onRefresh: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on('scheduledTask:refresh', handler);
+      return () => ipcRenderer.removeListener('scheduledTask:refresh', handler);
+    },
   },
   networkStatus: {
     send: (status: 'online' | 'offline') => ipcRenderer.send('network:status-change', status),
+  },
+  feishu: {
+    install: {
+      qrcode: (isLark: boolean) =>
+        ipcRenderer.invoke('feishu:install:qrcode', { isLark }) as Promise<{
+          url: string;
+          deviceCode: string;
+          interval: number;
+          expireIn: number;
+        }>,
+      poll: (deviceCode: string) =>
+        ipcRenderer.invoke('feishu:install:poll', { deviceCode }) as Promise<{
+          done: boolean;
+          appId?: string;
+          appSecret?: string;
+          domain?: string;
+          error?: string;
+        }>,
+      verify: (appId: string, appSecret: string) =>
+        ipcRenderer.invoke('feishu:install:verify', { appId, appSecret }) as Promise<{
+          success: boolean;
+          error?: string;
+        }>,
+    },
   },
 });

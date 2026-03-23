@@ -4,7 +4,6 @@ import { existsSync, mkdirSync, writeFileSync, chmodSync, statSync, readdirSync 
 import { delimiter, dirname, join } from 'path';
 import { buildEnvForConfig, getCurrentApiConfig, resolveCurrentApiConfig } from './claudeSettings';
 import type { OpenAICompatProxyTarget } from './coworkOpenAICompatProxy';
-import { getInternalApiBaseURL } from './coworkOpenAICompatProxy';
 import { coworkLog } from './coworkLogger';
 import { appendPythonRuntimeToEnv } from './pythonRuntime';
 import { isSystemProxyEnabled, resolveSystemProxyUrl } from './systemProxy';
@@ -440,7 +439,7 @@ function getWindowsGitToolDirs(bashPath: string): string[] {
   return candidates.filter((dir) => existsSync(dir));
 }
 
-function ensureElectronNodeShim(electronPath: string, npmBinDir?: string): string | null {
+export function ensureElectronNodeShim(electronPath: string, npmBinDir?: string): string | null {
   try {
     const shimDir = join(app.getPath('userData'), 'cowork', 'bin');
     mkdirSync(shimDir, { recursive: true });
@@ -1323,12 +1322,6 @@ export async function getEnhancedEnv(target: OpenAICompatProxyTarget = 'local'):
     delete env.LOBSTERAI_ELECTRON_PATH;
   }
 
-  // Inject internal API base URL for skill scripts (e.g. scheduled-task creation)
-  const internalApiBaseURL = getInternalApiBaseURL();
-  if (internalApiBaseURL) {
-    env.LOBSTERAI_API_BASE_URL = internalApiBaseURL;
-  }
-
   // Skip system proxy resolution if proxy env vars already exist
   if (env.http_proxy || env.HTTP_PROXY || env.https_proxy || env.HTTPS_PROXY) {
     return env;
@@ -1604,6 +1597,7 @@ export async function generateSessionTitle(userIntent: string | null): Promise<s
   try {
     const url = buildAnthropicMessagesUrl(config.baseURL);
     const prompt = `Generate a short title from this input, keep the same language, return plain text only (no markdown), and keep it within ${SESSION_TITLE_MAX_CHARS} characters: ${normalizedInput}`;
+    console.log(`[cowork-title] Generating title: apiType=${config.apiType}, baseURL=${config.baseURL}, requestUrl=${url}, model=${config.model}`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -1632,7 +1626,9 @@ export async function generateSessionTitle(userIntent: string | null): Promise<s
     }
 
     const payload = await response.json();
+    console.log(`[cowork-title] Title response payload:`, JSON.stringify(payload).slice(0, 500));
     const llmTitle = extractTextFromAnthropicResponse(payload);
+    console.log(`[cowork-title] Extracted title text: "${llmTitle}"`);
     return normalizeTitleToPlainText(llmTitle, fallbackTitle);
   } catch (error) {
     console.error('Failed to generate session title:', error);

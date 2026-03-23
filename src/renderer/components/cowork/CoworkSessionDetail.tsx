@@ -24,10 +24,11 @@ import PencilSquareIcon from '../icons/PencilSquareIcon';
 import TrashIcon from '../icons/TrashIcon';
 import WindowTitleBar from '../window/WindowTitleBar';
 import { getCompactFolderName } from '../../utils/path';
+import { getScheduledReminderDisplayText } from '../../../common/scheduledReminderText';
 
 interface CoworkSessionDetailProps {
   onManageSkills?: () => void;
-  onContinue: (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => void;
+  onContinue: (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => boolean | void | Promise<boolean | void>;
   onStop: () => void;
   onNavigateHome?: () => void;
   isSidebarCollapsed?: boolean;
@@ -126,9 +127,115 @@ type ParsedTodoItem = {
 
 const normalizeToolName = (value: string): string => value.toLowerCase().replace(/[\s_]+/g, '');
 
+const TOOL_USE_ERROR_TAG_PATTERN = /^<tool_use_error>([\s\S]*?)<\/tool_use_error>$/i;
+const ANSI_ESCAPE_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g;
+
+const getToolDisplayName = (toolName: string | undefined): string => {
+  if (!toolName) return 'Tool';
+  const normalized = normalizeToolName(toolName);
+  switch (normalized) {
+    case 'cron':
+      return 'Cron';
+    case 'exec':
+    case 'bash':
+    case 'shell':
+      return 'Bash';
+    case 'read':
+    case 'readfile':
+      return 'Read';
+    case 'write':
+    case 'writefile':
+      return 'Write';
+    case 'edit':
+    case 'editfile':
+      return 'Edit';
+    case 'multiedit':
+      return 'MultiEdit';
+    case 'process':
+      return 'Process';
+    default:
+      return toolName;
+  }
+};
+
+const isBashLikeToolName = (toolName: string | undefined): boolean => {
+  if (!toolName) return false;
+  const normalized = normalizeToolName(toolName);
+  return normalized === 'bash' || normalized === 'exec' || normalized === 'shell';
+};
+
+const getToolInputString = (
+  input: Record<string, unknown>,
+  keys: string[],
+): string | null => {
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+  return null;
+};
+
+const truncatePreview = (value: string, maxLength = 120): string =>
+  value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
+
+const normalizeToolResultText = (value: string): string => {
+  const withoutAnsi = value.replace(ANSI_ESCAPE_PATTERN, '');
+  const errorTagMatch = withoutAnsi.trim().match(TOOL_USE_ERROR_TAG_PATTERN);
+  return errorTagMatch ? errorTagMatch[1].trim() : withoutAnsi;
+};
+
 const isTodoWriteToolName = (toolName: string | undefined): boolean => {
   if (!toolName) return false;
   return normalizeToolName(toolName) === 'todowrite';
+};
+
+const isCronToolName = (toolName: string | undefined): boolean => {
+  if (!toolName) return false;
+  return normalizeToolName(toolName) === 'cron';
+};
+
+const getCronToolSummary = (input: Record<string, unknown>): string | null => {
+  const action = getToolInputString(input, ['action']);
+  if (!action) return null;
+
+  const job = input.job && typeof input.job === 'object'
+    ? input.job as Record<string, unknown>
+    : null;
+  const jobName = job
+    ? getToolInputString(job, ['name', 'id'])
+    : null;
+  const jobId = getToolInputString(input, ['jobId', 'id'])
+    ?? (job ? getToolInputString(job, ['id']) : null);
+  const wakeText = getToolInputString(input, ['text']);
+
+  switch (action) {
+    case 'add':
+      return [action, jobName ?? jobId].filter(Boolean).join(' · ');
+    case 'update':
+    case 'remove':
+    case 'run':
+    case 'runs':
+      return [action, jobId ?? jobName].filter(Boolean).join(' · ');
+    case 'wake':
+      return [action, wakeText].filter(Boolean).join(' · ');
+    default:
+      return action;
+  }
+};
+
+const formatStructuredText = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return value;
+  }
 };
 
 const toTrimmedString = (value: unknown): string | null => (
@@ -205,23 +312,42 @@ const getToolInputSummary = (
     return items ? getTodoWriteSummary(items) : null;
   }
 
-  switch (toolName) {
-    case 'Bash':
-      return typeof input.command === 'string'
-        ? input.command
-        : getStringArray(input.commands);
-    case 'Read':
-    case 'Write':
-    case 'Edit':
-    case 'MultiEdit':
-      return typeof input.file_path === 'string' ? input.file_path : null;
-    case 'Glob':
-    case 'Grep':
-      return typeof input.pattern === 'string' ? input.pattern : null;
-    case 'Task':
-      return typeof input.description === 'string' ? input.description : null;
-    case 'WebFetch':
-      return typeof input.url === 'string' ? input.url : null;
+  const normalizedToolName = normalizeToolName(toolName);
+
+  switch (normalizedToolName) {
+    case 'cron':
+      return getCronToolSummary(input);
+    case 'bash':
+    case 'exec':
+    case 'shell':
+      return getToolInputString(input, ['command', 'cmd', 'script'])
+        ?? getStringArray(input.commands);
+    case 'read':
+    case 'readfile':
+    case 'write':
+    case 'writefile':
+    case 'edit':
+    case 'editfile':
+    case 'multiedit':
+      return getToolInputString(input, ['file_path', 'path', 'filePath', 'target_file', 'targetFile'])
+        ?? (
+          typeof input.content === 'string' && input.content.trim()
+            ? truncatePreview(input.content.split('\n')[0].trim())
+            : null
+        );
+    case 'glob':
+    case 'grep':
+      return getToolInputString(input, ['pattern', 'query']);
+    case 'task':
+      return getToolInputString(input, ['description', 'task']);
+    case 'webfetch':
+      return getToolInputString(input, ['url']);
+    case 'process': {
+      const action = getToolInputString(input, ['action']);
+      const sessionId = getToolInputString(input, ['sessionId', 'session_id']);
+      if (action && sessionId) return `${action} · ${sessionId}`;
+      return action ?? sessionId;
+    }
     default:
       return null;
   }
@@ -244,13 +370,13 @@ const hasText = (value: unknown): value is string =>
 
 const getToolResultDisplay = (message: CoworkMessage): string => {
   if (hasText(message.content)) {
-    return message.content;
+    return formatStructuredText(normalizeToolResultText(message.content));
   }
   if (hasText(message.metadata?.toolResult)) {
-    return message.metadata?.toolResult ?? '';
+    return formatStructuredText(normalizeToolResultText(message.metadata?.toolResult ?? ''));
   }
   if (hasText(message.metadata?.error)) {
-    return message.metadata?.error ?? '';
+    return formatStructuredText(normalizeToolResultText(message.metadata?.error ?? ''));
   }
   return '';
 };
@@ -280,64 +406,6 @@ const isAbsolutePath = (value: string): boolean => (
 );
 
 const isRelativePath = (value: string): boolean => !isAbsolutePath(value) && !hasScheme(value);
-const SANDBOX_WORKSPACE_GUEST_ROOT = '/workspace/project';
-const SANDBOX_WORKSPACE_LEGACY_ROOT = '/workspace';
-const SANDBOX_WORKSPACE_RESERVED_DIRS = new Set(['skills', 'ipc', 'tmp']);
-const SANDBOX_WORKSPACE_PATH_PATTERN = /\/workspace(?:\/project)?(?:\/[^\s'"`)\]}>,;:!?]*)?/g;
-
-const isReservedSandboxSegment = (relativePath: string): boolean => {
-  const [firstSegment] = relativePath.split('/');
-  return Boolean(firstSegment && SANDBOX_WORKSPACE_RESERVED_DIRS.has(firstSegment.toLowerCase()));
-};
-
-const mapSandboxGuestPathToCwd = (filePath: string, cwd?: string): string | null => {
-  if (!cwd) return null;
-
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  const normalizedCwd = cwd.replace(/[\\/]+$/, '');
-
-  if (
-    normalizedPath === SANDBOX_WORKSPACE_GUEST_ROOT
-    || normalizedPath.startsWith(`${SANDBOX_WORKSPACE_GUEST_ROOT}/`)
-  ) {
-    const relativePath = normalizedPath
-      .slice(SANDBOX_WORKSPACE_GUEST_ROOT.length)
-      .replace(/^\/+/, '');
-    if (relativePath && isReservedSandboxSegment(relativePath)) {
-      return null;
-    }
-    return relativePath ? `${normalizedCwd}/${relativePath}` : normalizedCwd;
-  }
-
-  if (
-    normalizedPath !== SANDBOX_WORKSPACE_LEGACY_ROOT
-    && !normalizedPath.startsWith(`${SANDBOX_WORKSPACE_LEGACY_ROOT}/`)
-  ) {
-    return null;
-  }
-
-  const legacyRelativePath = normalizedPath
-    .slice(SANDBOX_WORKSPACE_LEGACY_ROOT.length)
-    .replace(/^\/+/, '');
-  if (!legacyRelativePath) {
-    return normalizedCwd;
-  }
-
-  if (isReservedSandboxSegment(legacyRelativePath)) {
-    return null;
-  }
-
-  return `${normalizedCwd}/${legacyRelativePath}`;
-};
-
-const mapSandboxGuestPathsInText = (value: string, cwd?: string): string => {
-  if (!value || !cwd || !value.includes('/workspace')) {
-    return value;
-  }
-
-  return value.replace(SANDBOX_WORKSPACE_PATH_PATTERN, (candidatePath) =>
-    mapSandboxGuestPathToCwd(candidatePath, cwd) ?? candidatePath);
-};
 
 const parseRootRelativePath = (value: string): string | null => {
   const trimmed = value.trim();
@@ -391,29 +459,29 @@ const toAbsolutePathFromCwd = (filePath: string, cwd: string): string => {
   return `${cwd.replace(/\/$/, '')}/${filePath.replace(/^\.\//, '')}`;
 };
 
-type ToolGroupItem = {
+export type ToolGroupItem = {
   type: 'tool_group';
   toolUse: CoworkMessage;
   toolResult?: CoworkMessage | null;
 };
 
-type DisplayItem =
+export type DisplayItem =
   | { type: 'message'; message: CoworkMessage }
   | ToolGroupItem;
 
-type AssistantTurnItem =
+export type AssistantTurnItem =
   | { type: 'assistant'; message: CoworkMessage }
   | { type: 'system'; message: CoworkMessage }
   | { type: 'tool_group'; group: ToolGroupItem }
   | { type: 'tool_result'; message: CoworkMessage };
 
-type ConversationTurn = {
+export type ConversationTurn = {
   id: string;
   userMessage: CoworkMessage | null;
   assistantItems: AssistantTurnItem[];
 };
 
-const buildDisplayItems = (messages: CoworkMessage[]): DisplayItem[] => {
+export const buildDisplayItems = (messages: CoworkMessage[]): DisplayItem[] => {
   const items: DisplayItem[] = [];
   const groupsByToolUseId = new Map<string, ToolGroupItem>();
   let pendingAdjacentGroup: ToolGroupItem | null = null;
@@ -459,7 +527,7 @@ const buildDisplayItems = (messages: CoworkMessage[]): DisplayItem[] => {
   return items;
 };
 
-const buildConversationTurns = (items: DisplayItem[]): ConversationTurn[] => {
+export const buildConversationTurns = (items: DisplayItem[]): ConversationTurn[] => {
   const turns: ConversationTurn[] = [];
   let currentTurn: ConversationTurn | null = null;
   let orphanIndex = 0;
@@ -546,7 +614,7 @@ const isVisibleAssistantTurnItem = (item: AssistantTurnItem): boolean => {
 const getVisibleAssistantItems = (assistantItems: AssistantTurnItem[]): AssistantTurnItem[] =>
   assistantItems.filter(isVisibleAssistantTurnItem);
 
-const hasRenderableAssistantContent = (turn: ConversationTurn): boolean => (
+export const hasRenderableAssistantContent = (turn: ConversationTurn): boolean => (
   getVisibleAssistantItems(turn.assistantItems).length > 0
 );
 
@@ -604,23 +672,32 @@ const ToolCallGroup: React.FC<{
   mapDisplayText,
 }) => {
   const { toolUse, toolResult } = group;
-  const toolName = typeof toolUse.metadata?.toolName === 'string' ? toolUse.metadata.toolName : 'Tool';
+  const rawToolName = typeof toolUse.metadata?.toolName === 'string' ? toolUse.metadata.toolName : 'Tool';
+  const toolName = getToolDisplayName(rawToolName);
   const toolInput = toolUse.metadata?.toolInput;
-  const isTodoWriteTool = isTodoWriteToolName(toolName);
+  const isCronTool = isCronToolName(rawToolName);
+  const isTodoWriteTool = isTodoWriteToolName(rawToolName);
   const todoItems = isTodoWriteTool ? parseTodoWriteItems(toolInput) : null;
   const mapText = mapDisplayText ?? ((value: string) => value);
-  const toolInputDisplayRaw = formatToolInput(toolName, toolInput);
+  const toolInputDisplayRaw = formatToolInput(rawToolName, toolInput);
   const toolInputDisplay = toolInputDisplayRaw ? mapText(toolInputDisplayRaw) : null;
-  const toolInputSummaryRaw = getToolInputSummary(toolName, toolInput) ?? toolInputDisplayRaw;
+  const toolInputSummaryRaw = getToolInputSummary(rawToolName, toolInput) ?? toolInputDisplayRaw;
   const toolInputSummary = toolInputSummaryRaw ? mapText(toolInputSummaryRaw) : null;
   const toolResultDisplayRaw = toolResult ? getToolResultDisplay(toolResult) : '';
   const toolResultDisplay = mapText(toolResultDisplayRaw);
+  const hasToolResultText = hasText(toolResultDisplay);
   const isToolError = Boolean(toolResult?.metadata?.isError || toolResult?.metadata?.error);
+  const showNoDetailError = isToolError && !hasToolResultText;
+  const toolResultFallback = showNoDetailError ? i18nService.t('coworkToolNoErrorDetail') : '';
+  const displayToolResult = hasToolResultText ? toolResultDisplay : toolResultFallback;
   const [isExpanded, setIsExpanded] = useState(false);
-  const resultLineCount = getToolResultLineCount(toolResultDisplay);
+  const resultLineCount = hasToolResultText ? getToolResultLineCount(toolResultDisplay) : 0;
+  const toolResultSummary = isCronTool && hasToolResultText
+    ? truncatePreview(toolResultDisplay.replace(/\s+/g, ' '))
+    : null;
 
   // Check if this is a Bash-like tool that should show terminal style
-  const isBashTool = toolName === 'Bash';
+  const isBashTool = isBashLikeToolName(rawToolName);
 
   return (
     <div className="relative py-1">
@@ -650,9 +727,17 @@ const ToolCallGroup: React.FC<{
               </code>
             )}
           </div>
-          {toolResult && resultLineCount > 0 && !isTodoWriteTool && (
-            <div className="text-xs dark:text-claude-darkTextSecondary/60 text-claude-textSecondary/60 mt-0.5">
-              {resultLineCount} {resultLineCount === 1 ? 'line' : 'lines'} of output
+          {toolResult && !isTodoWriteTool && (hasToolResultText || showNoDetailError) && (
+            <div className={`text-xs mt-0.5 ${
+              hasToolResultText
+                ? 'dark:text-claude-darkTextSecondary/60 text-claude-textSecondary/60'
+                : showNoDetailError
+                  ? 'text-red-500/80'
+                  : 'dark:text-claude-darkTextSecondary/60 text-claude-textSecondary/60'
+            }`}>
+              {hasToolResultText
+                ? (toolResultSummary ?? `${resultLineCount} ${resultLineCount === 1 ? 'line' : 'lines'} of output`)
+                : toolResultFallback}
             </div>
           )}
           {!toolResult && (
@@ -682,11 +767,15 @@ const ToolCallGroup: React.FC<{
                     <span className="whitespace-pre-wrap break-words">{toolInputDisplay}</span>
                   </div>
                 )}
-                {toolResult && toolResultDisplay && (
+                {toolResult && (hasToolResultText || showNoDetailError) && (
                   <div className={`mt-1.5 whitespace-pre-wrap break-words ${
-                    isToolError ? 'text-red-400' : 'dark:text-claude-darkTextSecondary text-claude-textSecondary'
+                    isToolError
+                      ? 'text-red-400'
+                      : hasToolResultText
+                        ? 'dark:text-claude-darkTextSecondary text-claude-textSecondary'
+                        : 'dark:text-claude-darkTextSecondary/70 text-claude-textSecondary/70 italic'
                   }`}>
-                    {toolResultDisplay}
+                    {displayToolResult}
                   </div>
                 )}
                 {!toolResult && (
@@ -713,16 +802,20 @@ const ToolCallGroup: React.FC<{
                   </div>
                 </div>
               )}
-              {toolResult && (
+              {toolResult && (hasToolResultText || showNoDetailError) && (
                 <div>
                   <div className="text-[10px] font-medium dark:text-claude-darkTextSecondary/70 text-claude-textSecondary/70 uppercase tracking-wider mb-1">
                     {i18nService.t('coworkToolResult')}
                   </div>
                   <div className="max-h-64 overflow-y-auto">
                     <pre className={`text-xs whitespace-pre-wrap break-words font-mono ${
-                      isToolError ? 'text-red-500' : 'dark:text-claude-darkText text-claude-text'
+                      isToolError
+                        ? 'text-red-500'
+                        : hasToolResultText
+                          ? 'dark:text-claude-darkText text-claude-text'
+                          : 'dark:text-claude-darkTextSecondary text-claude-textSecondary italic'
                     }`}>
-                      {toolResultDisplay}
+                      {displayToolResult}
                     </pre>
                   </div>
                 </div>
@@ -799,7 +892,7 @@ const CopyButton: React.FC<{
   );
 };
 
-const UserMessageItem: React.FC<{ message: CoworkMessage; skills: Skill[] }> = React.memo(({ message, skills }) => {
+export const UserMessageItem: React.FC<{ message: CoworkMessage; skills: Skill[] }> = React.memo(({ message, skills }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
@@ -1025,7 +1118,7 @@ const ThinkingBlock: React.FC<{
   );
 };
 
-const AssistantTurnBlock: React.FC<{
+export const AssistantTurnBlock: React.FC<{
   turn: ConversationTurn;
   resolveLocalFilePath?: (href: string, text: string) => string | null;
   mapDisplayText?: (value: string) => string;
@@ -1044,7 +1137,8 @@ const AssistantTurnBlock: React.FC<{
     const rawContent = hasText(message.content)
       ? message.content
       : (typeof message.metadata?.error === 'string' ? message.metadata.error : '');
-    const content = mapDisplayText ? mapDisplayText(rawContent) : rawContent;
+    const normalizedContent = getScheduledReminderDisplayText(rawContent) ?? rawContent;
+    const content = mapDisplayText ? mapDisplayText(normalizedContent) : normalizedContent;
     if (!content.trim()) return null;
 
     return (
@@ -1063,7 +1157,11 @@ const AssistantTurnBlock: React.FC<{
     const toolResultDisplayRaw = getToolResultDisplay(message);
     const toolResultDisplay = mapDisplayText ? mapDisplayText(toolResultDisplayRaw) : toolResultDisplayRaw;
     const isToolError = Boolean(message.metadata?.isError || message.metadata?.error);
-    const resultLineCount = getToolResultLineCount(toolResultDisplay);
+    const hasToolResultText = hasText(toolResultDisplay);
+    const resultLineCount = hasToolResultText ? getToolResultLineCount(toolResultDisplay) : 0;
+    const showNoDetailError = isToolError && !hasToolResultText;
+    const fallbackText = showNoDetailError ? i18nService.t('coworkToolNoErrorDetail') : '';
+    const displayText = hasToolResultText ? toolResultDisplay : fallbackText;
     return (
       <div className="py-1">
         <div className="flex items-start gap-2">
@@ -1079,13 +1177,28 @@ const AssistantTurnBlock: React.FC<{
                 {resultLineCount} {resultLineCount === 1 ? 'line' : 'lines'} of output
               </div>
             )}
-            <div className="mt-2 px-3 py-2 rounded-lg dark:bg-claude-darkSurface/50 bg-claude-surface/50 max-h-64 overflow-y-auto">
-              <pre className={`text-xs whitespace-pre-wrap break-words font-mono ${
-                isToolError ? 'text-red-500' : 'dark:text-claude-darkText text-claude-text'
+            {resultLineCount === 0 && showNoDetailError && (
+              <div className={`text-xs mt-0.5 ${
+                isToolError
+                  ? 'text-red-500/80'
+                  : 'dark:text-claude-darkTextSecondary/60 text-claude-textSecondary/60'
               }`}>
-                {toolResultDisplay || i18nService.t('coworkToolRunning')}
-              </pre>
-            </div>
+                {fallbackText}
+              </div>
+            )}
+            {(hasToolResultText || showNoDetailError) && (
+              <div className="mt-2 px-3 py-2 rounded-lg dark:bg-claude-darkSurface/50 bg-claude-surface/50 max-h-64 overflow-y-auto">
+                <pre className={`text-xs whitespace-pre-wrap break-words font-mono ${
+                  isToolError
+                    ? 'text-red-500'
+                    : hasToolResultText
+                      ? 'dark:text-claude-darkText text-claude-text'
+                      : 'dark:text-claude-darkTextSecondary text-claude-textSecondary italic'
+                }`}>
+                  {displayText}
+                </pre>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1176,6 +1289,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   const isMac = window.electron.platform === 'darwin';
   const currentSession = useSelector((state: RootState) => state.cowork.currentSession);
   const isStreaming = useSelector((state: RootState) => state.cowork.isStreaming);
+  const remoteManaged = useSelector((state: RootState) => state.cowork.remoteManaged);
   const skills = useSelector((state: RootState) => state.skill.skills);
   const detailRootRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1560,8 +1674,9 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     setIsScrollable((prev) => (prev === scrollable ? prev : scrollable));
     if (!scrollable) return;
 
-    // Show turn nav and reset hide timer
-    setShowTurnNav(true);
+    // Show turn nav and reset hide timer (use functional updater to avoid redundant re-renders)
+    setShowTurnNav((prev) => (prev ? prev : true));
+
     if (hideNavTimerRef.current) clearTimeout(hideNavTimerRef.current);
     hideNavTimerRef.current = setTimeout(() => setShowTurnNav(false), NAV_HIDE_DELAY);
 
@@ -1623,57 +1738,42 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     const textValue = typeof text === 'string' ? text.trim() : '';
     if (!hrefValue && !textValue) return null;
 
-    // In sandbox mode, translate VM guest paths to host paths.
-    const mapSandboxPath = (filePath: string): string => {
-      if (
-        currentSession?.executionMode !== 'sandbox' ||
-        !currentSession?.cwd
-      ) {
-        return filePath;
-      }
-      const mapped = mapSandboxGuestPathToCwd(filePath, currentSession.cwd);
-      return mapped ?? filePath;
-    };
-
     const hrefRootRelative = hrefValue ? parseRootRelativePath(hrefValue) : null;
     if (hrefRootRelative) {
-      return mapSandboxPath(hrefRootRelative);
+      return hrefRootRelative;
     }
 
     const hrefPath = hrefValue ? normalizeLocalPath(hrefValue) : null;
     if (hrefPath) {
       if (hrefPath.isRelative && currentSession?.cwd) {
-        return mapSandboxPath(toAbsolutePathFromCwd(hrefPath.path, currentSession.cwd));
+        return toAbsolutePathFromCwd(hrefPath.path, currentSession.cwd);
       }
       if (hrefPath.isAbsolute) {
-        return mapSandboxPath(hrefPath.path);
+        return hrefPath.path;
       }
     }
 
     const textRootRelative = textValue ? parseRootRelativePath(textValue) : null;
     if (textRootRelative) {
-      return mapSandboxPath(textRootRelative);
+      return textRootRelative;
     }
 
     const textPath = textValue ? normalizeLocalPath(textValue) : null;
     if (textPath) {
       if (textPath.isRelative && currentSession?.cwd) {
-        return mapSandboxPath(toAbsolutePathFromCwd(textPath.path, currentSession.cwd));
+        return toAbsolutePathFromCwd(textPath.path, currentSession.cwd);
       }
       if (textPath.isAbsolute) {
-        return mapSandboxPath(textPath.path);
+        return textPath.path;
       }
     }
 
     return null;
-  }, [currentSession?.cwd, currentSession?.executionMode]);
+  }, [currentSession?.cwd]);
 
   const mapDisplayText = useCallback((value: string): string => {
-    if (currentSession?.executionMode !== 'sandbox') {
-      return value;
-    }
-    return mapSandboxGuestPathsInText(value, currentSession?.cwd);
-  }, [currentSession?.cwd, currentSession?.executionMode]);
+    return value;
+  }, []);
 
   const messages = currentSession?.messages;
   const displayItems = useMemo(() => messages ? buildDisplayItems(messages) : [], [messages]);
@@ -1706,6 +1806,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       setCurrentTurnIndex(lastIndex);
     }
   }, [currentSession?.messages?.length, lastMessageContent, isStreaming, shouldAutoScroll, turns.length]);
+
 
   if (!currentSession) {
     return null;
@@ -1762,7 +1863,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     <div ref={detailRootRef} className="flex-1 flex flex-col dark:bg-claude-darkBg bg-claude-bg h-full">
       {/* Header */}
       <div className="draggable flex h-12 items-center justify-between px-4 border-b dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurface/50 bg-claude-surface/50 shrink-0">
-        {/* Left side: Toggle buttons (when collapsed) + Title + Sandbox badge */}
+        {/* Left side: Toggle buttons (when collapsed) + Title */}
         <div className="flex h-full items-center gap-2 min-w-0">
           {isSidebarCollapsed && (
             <div className={`non-draggable flex items-center gap-1 ${isMac ? 'pl-[68px]' : ''}`}>
@@ -1804,16 +1905,6 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
             <h1 className="text-sm leading-none font-medium dark:text-claude-darkText text-claude-text truncate max-w-[360px]">
               {currentSession.title || i18nService.t('coworkNewSession')}
             </h1>
-          )}
-          {currentSession.executionMode === 'sandbox' && (
-            <span className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-              {i18nService.t('coworkSandboxBadge')}
-            </span>
-          )}
-          {currentSession.executionMode === 'local' && (
-            <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-              {i18nService.t('coworkLocalBadge')}
-            </span>
           )}
         </div>
 
@@ -1953,7 +2044,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
         {/* Turn Navigation Buttons */}
         {turns.length > 1 && isScrollable && (
           <div
-            className={`absolute right-4 top-1/2 -translate-y-1/2 flex flex-col rounded-lg overflow-hidden shadow-lg transition-opacity duration-300 z-10
+            className={`absolute right-6 top-1/2 -translate-y-1/2 flex flex-col rounded-lg overflow-hidden shadow-lg transition-opacity duration-300 z-10
+
               dark:bg-claude-darkSurface/90 bg-claude-surface/90 backdrop-blur-sm
               border dark:border-claude-darkBorder border-claude-border
               ${showTurnNav ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
@@ -1993,16 +2085,26 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       {/* Input Area */}
       <div className="p-4 shrink-0">
         <div className="max-w-3xl mx-auto">
-          <CoworkPromptInput
-            onSubmit={onContinue}
-            onStop={onStop}
-            isStreaming={isStreaming}
-            placeholder={i18nService.t('coworkContinuePlaceholder')}
-            disabled={false}
-            onManageSkills={onManageSkills}
-            size="large"
-            showModelSelector={true}
-          />
+          {remoteManaged ? (
+            <div className="flex items-center gap-2 rounded-xl border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurface bg-claude-surface px-4 py-3">
+              <InformationCircleIcon className="h-5 w-5 shrink-0 dark:text-claude-darkTextSecondary text-claude-textSecondary" />
+              <span className="text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                {i18nService.t('coworkRemoteManagedPlaceholder')}
+              </span>
+            </div>
+          ) : (
+            <CoworkPromptInput
+              onSubmit={onContinue}
+              onStop={onStop}
+              isStreaming={isStreaming}
+              placeholder={i18nService.t('coworkContinuePlaceholder')}
+              disabled={false}
+              onManageSkills={onManageSkills}
+              size="large"
+              showModelSelector={true}
+              sessionId={currentSession?.id}
+            />
+          )}
         </div>
       </div>
     </div>

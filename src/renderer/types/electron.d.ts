@@ -51,6 +51,7 @@ interface CoworkConfig {
   workingDirectory: string;
   systemPrompt: string;
   executionMode: 'auto' | 'local' | 'sandbox';
+  agentEngine: 'openclaw' | 'yd_cowork';
   memoryEnabled: boolean;
   memoryImplicitUpdateEnabled: boolean;
   memoryLlmJudgeEnabled: boolean;
@@ -62,6 +63,7 @@ type CoworkConfigUpdate = Partial<Pick<
   CoworkConfig,
   | 'workingDirectory'
   | 'executionMode'
+  | 'agentEngine'
   | 'memoryEnabled'
   | 'memoryImplicitUpdateEnabled'
   | 'memoryLlmJudgeEnabled'
@@ -72,12 +74,6 @@ type CoworkConfigUpdate = Partial<Pick<
 interface CoworkUserMemoryEntry {
   id: string;
   text: string;
-  confidence: number;
-  isExplicit: boolean;
-  status: 'created' | 'stale' | 'deleted';
-  createdAt: number;
-  updatedAt: number;
-  lastUsedAt: number | null;
 }
 
 interface CoworkMemoryStats {
@@ -104,21 +100,20 @@ interface CoworkApiConfig {
   apiType?: 'anthropic' | 'openai';
 }
 
-interface CoworkSandboxStatus {
-  supported: boolean;
-  runtimeReady: boolean;
-  imageReady: boolean;
-  downloading: boolean;
-  progress?: CoworkSandboxProgress;
-  error?: string | null;
-}
+type OpenClawEnginePhase =
+  | 'not_installed'
+  | 'installing'
+  | 'ready'
+  | 'starting'
+  | 'running'
+  | 'error';
 
-interface CoworkSandboxProgress {
-  stage: 'runtime' | 'image';
-  received: number;
-  total?: number;
-  percent?: number;
-  url?: string;
+interface OpenClawEngineStatus {
+  phase: OpenClawEnginePhase;
+  version: string | null;
+  progressPercent?: number;
+  message?: string;
+  canRetry: boolean;
 }
 
 interface AppUpdateDownloadProgress {
@@ -231,7 +226,8 @@ interface IElectronAPI {
     list: () => Promise<{ success: boolean; skills?: Skill[]; error?: string }>;
     setEnabled: (options: { id: string; enabled: boolean }) => Promise<{ success: boolean; skills?: Skill[]; error?: string }>;
     delete: (id: string) => Promise<{ success: boolean; skills?: Skill[]; error?: string }>;
-    download: (source: string) => Promise<{ success: boolean; skills?: Skill[]; error?: string }>;
+    download: (source: string) => Promise<{ success: boolean; skills?: Skill[]; error?: string; auditReport?: any; pendingInstallId?: string }>;
+    confirmInstall: (pendingId: string, action: string) => Promise<{ success: boolean; skills?: Skill[]; error?: string }>;
     getRoot: () => Promise<{ success: boolean; path?: string; error?: string }>;
     autoRoutingPrompt: () => Promise<{ success: boolean; prompt?: string | null; error?: string }>;
     getConfig: (skillId: string) => Promise<{ success: boolean; config?: Record<string, string>; error?: string }>;
@@ -249,6 +245,7 @@ interface IElectronAPI {
     delete: (id: string) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     setEnabled: (options: { id: string; enabled: boolean }) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     fetchMarketplace: () => Promise<{ success: boolean; data?: McpMarketplaceData; error?: string }>;
+    refreshBridge: () => Promise<{ success: boolean; tools: number; error?: string }>;
   };
   api: {
     fetch: (options: {
@@ -275,6 +272,15 @@ interface IElectronAPI {
   saveApiConfig: (config: CoworkApiConfig) => Promise<{ success: boolean; error?: string }>;
   generateSessionTitle: (userInput: string | null) => Promise<string>;
   getRecentCwds: (limit?: number) => Promise<string[]>;
+  openclaw: {
+    engine: {
+      getStatus: () => Promise<{ success: boolean; status?: OpenClawEngineStatus; error?: string }>;
+      install: () => Promise<{ success: boolean; status?: OpenClawEngineStatus; error?: string }>;
+      retryInstall: () => Promise<{ success: boolean; status?: OpenClawEngineStatus; error?: string }>;
+      restartGateway: () => Promise<{ success: boolean; status?: OpenClawEngineStatus; error?: string }>;
+      onProgress: (callback: (status: OpenClawEngineStatus) => void) => () => void;
+    };
+  };
   ipcRenderer: {
     send: (channel: string, ...args: any[]) => void;
     on: (channel: string, func: (...args: any[]) => void) => () => void;
@@ -288,14 +294,15 @@ interface IElectronAPI {
     onStateChanged: (callback: (state: WindowState) => void) => () => void;
   };
   cowork: {
-    startSession: (options: { prompt: string; cwd?: string; systemPrompt?: string; title?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
-    continueSession: (options: { sessionId: string; prompt: string; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
+    startSession: (options: { prompt: string; cwd?: string; systemPrompt?: string; title?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string; code?: string; engineStatus?: OpenClawEngineStatus }>;
+    continueSession: (options: { sessionId: string; prompt: string; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string; code?: string; engineStatus?: OpenClawEngineStatus }>;
     stopSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
     deleteSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
     deleteSessions: (sessionIds: string[]) => Promise<{ success: boolean; error?: string }>;
     setSessionPinned: (options: { sessionId: string; pinned: boolean }) => Promise<{ success: boolean; error?: string }>;
     renameSession: (options: { sessionId: string; title: string }) => Promise<{ success: boolean; error?: string }>;
     getSession: (sessionId: string) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
+    remoteManaged: (sessionId: string) => Promise<{ success: boolean; remoteManaged: boolean; error?: string }>;
     listSessions: () => Promise<{ success: boolean; sessions?: CoworkSessionSummary[]; error?: string }>;
     exportResultImage: (options: {
       rect: { x: number; y: number; width: number; height: number };
@@ -313,33 +320,26 @@ interface IElectronAPI {
     setConfig: (config: CoworkConfigUpdate) => Promise<{ success: boolean; error?: string }>;
     listMemoryEntries: (input: {
       query?: string;
-      status?: 'created' | 'stale' | 'deleted' | 'all';
-      includeDeleted?: boolean;
       limit?: number;
       offset?: number;
     }) => Promise<{ success: boolean; entries?: CoworkUserMemoryEntry[]; error?: string }>;
     createMemoryEntry: (input: {
       text: string;
-      confidence?: number;
-      isExplicit?: boolean;
     }) => Promise<{ success: boolean; entry?: CoworkUserMemoryEntry; error?: string }>;
     updateMemoryEntry: (input: {
       id: string;
-      text?: string;
-      confidence?: number;
-      status?: 'created' | 'stale' | 'deleted';
-      isExplicit?: boolean;
+      text: string;
     }) => Promise<{ success: boolean; entry?: CoworkUserMemoryEntry; error?: string }>;
     deleteMemoryEntry: (input: { id: string }) => Promise<{ success: boolean; error?: string }>;
     getMemoryStats: () => Promise<{ success: boolean; stats?: CoworkMemoryStats; error?: string }>;
-    getSandboxStatus: () => Promise<CoworkSandboxStatus>;
-    installSandbox: () => Promise<{ success: boolean; status: CoworkSandboxStatus; error?: string }>;
-    onSandboxDownloadProgress: (callback: (data: CoworkSandboxProgress) => void) => () => void;
+    readBootstrapFile: (filename: string) => Promise<{ success: boolean; content: string; error?: string }>;
+    writeBootstrapFile: (filename: string, content: string) => Promise<{ success: boolean; error?: string }>;
     onStreamMessage: (callback: (data: { sessionId: string; message: CoworkMessage }) => void) => () => void;
     onStreamMessageUpdate: (callback: (data: { sessionId: string; messageId: string; content: string }) => void) => () => void;
     onStreamPermission: (callback: (data: { sessionId: string; request: CoworkPermissionRequest }) => void) => () => void;
     onStreamComplete: (callback: (data: { sessionId: string; claudeSessionId: string | null }) => void) => () => void;
     onStreamError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
+    onSessionsChanged: (callback: () => void) => () => void;
   };
   dialog: {
     selectDirectory: () => Promise<{ success: boolean; path: string | null }>;
@@ -360,7 +360,6 @@ interface IElectronAPI {
   appInfo: {
     getVersion: () => Promise<string>;
     getSystemLocale: () => Promise<string>;
-    quit: () => Promise<{ success: boolean }>;
   };
   appUpdate: {
     download: (url: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
@@ -381,46 +380,55 @@ interface IElectronAPI {
   };
   im: {
     getConfig: () => Promise<{ success: boolean; config?: IMGatewayConfig; error?: string }>;
-    setConfig: (config: Partial<IMGatewayConfig>) => Promise<{ success: boolean; error?: string }>;
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => Promise<{ success: boolean; error?: string }>;
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli') => Promise<{ success: boolean; error?: string }>;
+    setConfig: (config: Partial<IMGatewayConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
+    syncConfig: () => Promise<{ success: boolean; error?: string }>;
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli',
+      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
       configOverride?: Partial<IMGatewayConfig>
     ) => Promise<{ success: boolean; result?: IMConnectivityTestResult; error?: string }>;
     getStatus: () => Promise<{ success: boolean; status?: IMGatewayStatus; error?: string }>;
-    getQzhuliBindStatus: (
-      key: string,
-      environment: 'dev' | 'release'
-    ) => Promise<{
+    getLocalIp: () => Promise<string>;
+    getOpenClawConfigSchema: () => Promise<{ success: boolean; result?: { schema: Record<string, unknown>; uiHints: Record<string, Record<string, unknown>> }; error?: string }>;
+    weixinQrLoginStart: () => Promise<{ success: boolean; qrDataUrl?: string; message: string; sessionKey?: string }>;
+    weixinQrLoginWait: (accountId?: string) => Promise<{ success: boolean; connected: boolean; message: string; accountId?: string }>;
+    listPairingRequests: (platform: string) => Promise<{
       success: boolean;
-      result?: {
-        status: 'pending' | 'bound';
-        convId?: string;
-        cid?: string;
-        token?: string;
-        apiModelBaseUrl?: string;
-        apiModelKey?: string;
-      };
+      requests: Array<{ id: string; code: string; createdAt: string; lastSeenAt: string; meta?: Record<string, string> }>;
+      allowFrom: string[];
       error?: string;
     }>;
+    approvePairingCode: (platform: string, code: string) => Promise<{ success: boolean; error?: string }>;
+    rejectPairingRequest: (platform: string, code: string) => Promise<{ success: boolean; error?: string }>;
     onStatusChange: (callback: (status: IMGatewayStatus) => void) => () => void;
     onMessageReceived: (callback: (message: IMMessage) => void) => () => void;
   };
   scheduledTasks: {
-    list: () => Promise<any>;
-    get: (id: string) => Promise<any>;
-    create: (input: any) => Promise<any>;
-    update: (id: string, input: any) => Promise<any>;
-    delete: (id: string) => Promise<any>;
-    toggle: (id: string, enabled: boolean) => Promise<any>;
-    runManually: (id: string) => Promise<any>;
-    stop: (id: string) => Promise<any>;
-    listRuns: (taskId: string, limit?: number, offset?: number) => Promise<any>;
-    countRuns: (taskId: string) => Promise<any>;
-    listAllRuns: (limit?: number, offset?: number) => Promise<any>;
-    onStatusUpdate: (callback: (data: any) => void) => () => void;
-    onRunUpdate: (callback: (data: any) => void) => () => void;
+    list: () => Promise<{ success: boolean; tasks?: import('./scheduledTask').ScheduledTask[]; error?: string }>;
+    get: (id: string) => Promise<{ success: boolean; task?: import('./scheduledTask').ScheduledTask; error?: string }>;
+    create: (input: import('./scheduledTask').ScheduledTaskInput) => Promise<{ success: boolean; task?: import('./scheduledTask').ScheduledTask; error?: string }>;
+    update: (id: string, input: Partial<import('./scheduledTask').ScheduledTaskInput>) => Promise<{ success: boolean; task?: import('./scheduledTask').ScheduledTask; error?: string }>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    toggle: (id: string, enabled: boolean) => Promise<{ success: boolean; task?: import('./scheduledTask').ScheduledTask; warning?: string; error?: string }>;
+    runManually: (id: string) => Promise<{ success: boolean; error?: string }>;
+    stop: (id: string) => Promise<{ success: boolean; error?: string }>;
+    listRuns: (taskId: string, limit?: number, offset?: number) => Promise<{ success: boolean; runs?: import('./scheduledTask').ScheduledTaskRun[]; error?: string }>;
+    countRuns: (taskId: string) => Promise<{ success: boolean; count?: number; error?: string }>;
+    listAllRuns: (limit?: number, offset?: number) => Promise<{ success: boolean; runs?: import('./scheduledTask').ScheduledTaskRunWithName[]; error?: string }>;
+    resolveSession: (sessionKey: string) => Promise<{
+      success: boolean;
+      session?: import('./cowork').CoworkSession | null;
+      error?: string;
+    }>;
+    listChannels: () => Promise<{
+      success: boolean;
+      channels?: import('./scheduledTask').ScheduledTaskChannelOption[];
+      error?: string;
+    }>;
+    onStatusUpdate: (callback: (data: import('./scheduledTask').ScheduledTaskStatusEvent) => void) => () => void;
+    onRunUpdate: (callback: (data: import('./scheduledTask').ScheduledTaskRunEvent) => void) => () => void;
+    onRefresh: (callback: () => void) => () => void;
   };
   permissions: {
     checkCalendar: () => Promise<{ success: boolean; status?: string; error?: string; autoRequested?: boolean }>;
@@ -429,54 +437,145 @@ interface IElectronAPI {
   networkStatus: {
     send: (status: 'online' | 'offline') => void;
   };
+  feishu: {
+    install: {
+      qrcode: (isLark: boolean) => Promise<{
+        url: string;
+        deviceCode: string;
+        interval: number;
+        expireIn: number;
+      }>;
+      poll: (deviceCode: string) => Promise<{
+        done: boolean;
+        appId?: string;
+        appSecret?: string;
+        domain?: string;
+        error?: string;
+      }>;
+      verify: (appId: string, appSecret: string) => Promise<{
+        success: boolean;
+        error?: string;
+      }>;
+    };
+  };
 }
 
 // IM Gateway types
 interface IMGatewayConfig {
-  dingtalk: DingTalkConfig;
-  feishu: FeishuConfig;
+  dingtalk: DingTalkOpenClawConfig;
+  feishu: FeishuOpenClawConfig;
+  telegram: TelegramOpenClawConfig;
   qq: QQConfig;
-  telegram: TelegramConfig;
-  discord: DiscordConfig;
+  discord: DiscordOpenClawConfig;
   nim: NimConfig;
-  qzhuli: QzhuliConfig;
   xiaomifeng: XiaomifengConfig;
   wecom: WecomConfig;
+  popo: PopoOpenClawConfig;
+  weixin: WeixinOpenClawConfig;
   settings: IMSettings;
 }
 
-interface DingTalkConfig {
+interface DingTalkOpenClawConfig {
   enabled: boolean;
   clientId: string;
   clientSecret: string;
-  robotCode?: string;
-  corpId?: string;
-  agentId?: string;
-  messageType: 'markdown' | 'card';
-  cardTemplateId?: string;
-  debug?: boolean;
+  dmPolicy: 'open' | 'pairing' | 'allowlist';
+  allowFrom: string[];
+  groupPolicy: 'open' | 'allowlist';
+  sessionTimeout: number;
+  separateSessionByConversation: boolean;
+  groupSessionScope: 'group' | 'group_sender';
+  sharedMemoryAcrossConversations: boolean;
+  gatewayBaseUrl: string;
+  debug: boolean;
 }
 
-interface FeishuConfig {
+interface FeishuOpenClawGroupConfig {
+  requireMention?: boolean;
+  allowFrom?: string[];
+  systemPrompt?: string;
+}
+
+interface FeishuOpenClawConfig {
   enabled: boolean;
   appId: string;
   appSecret: string;
   domain: 'feishu' | 'lark' | string;
-  encryptKey?: string;
-  verificationToken?: string;
-  renderMode: 'text' | 'card';
-  debug?: boolean;
+  dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'allowlist' | 'open' | 'disabled';
+  groupAllowFrom: string[];
+  groups: Record<string, FeishuOpenClawGroupConfig>;
+  historyLimit: number;
+  replyMode: 'auto' | 'static' | 'streaming';
+  mediaMaxMb: number;
+  debug: boolean;
 }
 
-interface TelegramConfig {
-  enabled: boolean;
-  botToken: string;
-  debug?: boolean;
+interface TelegramOpenClawGroupConfig {
+  requireMention?: boolean;
+  allowFrom?: string[];
+  systemPrompt?: string;
 }
 
-interface DiscordConfig {
+interface TelegramOpenClawConfig {
   enabled: boolean;
   botToken: string;
+  dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'allowlist' | 'open' | 'disabled';
+  groupAllowFrom: string[];
+  groups: Record<string, TelegramOpenClawGroupConfig>;
+  historyLimit: number;
+  replyToMode: 'off' | 'first' | 'all';
+  linkPreview: boolean;
+  streaming: 'off' | 'partial' | 'block' | 'progress';
+  mediaMaxMb: number;
+  proxy: string;
+  webhookUrl: string;
+  webhookSecret: string;
+  debug: boolean;
+}
+
+interface DiscordOpenClawGuildConfig {
+  requireMention?: boolean;
+  allowFrom?: string[];
+  systemPrompt?: string;
+}
+
+interface DiscordOpenClawConfig {
+  enabled: boolean;
+  botToken: string;
+  dmPolicy: 'pairing' | 'allowlist' | 'open' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'allowlist' | 'open' | 'disabled';
+  groupAllowFrom: string[];
+  guilds: Record<string, DiscordOpenClawGuildConfig>;
+  historyLimit: number;
+  streaming: 'off' | 'partial' | 'block' | 'progress';
+  mediaMaxMb: number;
+  proxy: string;
+  debug: boolean;
+}
+
+interface NimP2pConfig {
+  policy: 'open' | 'allowlist' | 'disabled';
+  allowFrom?: (string | number)[];
+}
+
+interface NimTeamConfig {
+  policy: 'open' | 'allowlist' | 'disabled';
+  allowFrom?: (string | number)[];
+}
+
+interface NimQChatConfig {
+  policy: 'open' | 'allowlist' | 'disabled';
+  allowFrom?: (string | number)[];
+}
+
+interface NimAdvancedConfig {
+  mediaMaxMb?: number;
+  textChunkLimit?: number;
   debug?: boolean;
 }
 
@@ -485,14 +584,10 @@ interface NimConfig {
   appKey: string;
   account: string;
   token: string;
-  accountWhitelist: string;
-  debug?: boolean;
-  // 群组消息配置
-  teamPolicy?: 'open' | 'allowlist' | 'disabled';
-  teamAllowlist?: string;
-  // QChat 圈组配置
-  qchatEnabled?: boolean;
-  qchatServerIds?: string;
+  p2p?: NimP2pConfig;
+  team?: NimTeamConfig;
+  qchat?: NimQChatConfig;
+  advanced?: NimAdvancedConfig;
 }
 
 interface XiaomifengConfig {
@@ -506,27 +601,55 @@ interface QQConfig {
   enabled: boolean;
   appId: string;
   appSecret: string;
-  debug?: boolean;
+  dmPolicy: 'open' | 'pairing' | 'allowlist';
+  allowFrom: string[];
+  groupPolicy: 'open' | 'allowlist' | 'disabled';
+  groupAllowFrom: string[];
+  historyLimit: number;
+  markdownSupport: boolean;
+  imageServerBaseUrl: string;
+  debug: boolean;
 }
 
 interface WecomConfig {
   enabled: boolean;
   botId: string;
   secret: string;
-  debug?: boolean;
+  dmPolicy: 'open' | 'pairing' | 'allowlist' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'open' | 'allowlist' | 'disabled';
+  groupAllowFrom: string[];
+  sendThinkingMessage: boolean;
+  debug: boolean;
 }
 
-interface QzhuliConfig {
+interface PopoOpenClawConfig {
   enabled: boolean;
-  environment: 'dev' | 'release';
-  convId: string;
-  senderCid: string;
-  wsToken: string;
-  reconnectMs: number;
-  maxReconnectMs: number;
-  maxReconnectAttempts: number;
-  heartbeatMs: number;
-  debug?: boolean;
+  connectionMode: 'websocket' | 'webhook';
+  appKey: string;
+  appSecret: string;
+  token: string;
+  aesKey: string;
+  webhookBaseUrl: string;
+  webhookPath: string;
+  webhookPort: number;
+  dmPolicy: 'open' | 'pairing' | 'allowlist' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'open' | 'allowlist' | 'disabled';
+  groupAllowFrom: string[];
+  textChunkLimit: number;
+  richTextChunkLimit: number;
+  debug: boolean;
+}
+
+interface WeixinOpenClawConfig {
+  enabled: boolean;
+  accountId: string;
+  dmPolicy: 'open' | 'pairing' | 'allowlist' | 'disabled';
+  allowFrom: string[];
+  groupPolicy: 'open' | 'allowlist' | 'disabled';
+  groupAllowFrom: string[];
+  debug: boolean;
 }
 
 interface IMSettings {
@@ -541,9 +664,10 @@ interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
-  qzhuli: QzhuliGatewayStatus;
   xiaomifeng: XiaomifengGatewayStatus;
   wecom: WecomGatewayStatus;
+  popo: PopoGatewayStatus;
+  weixin: WeixinGatewayStatus;
 }
 
 type IMConnectivityVerdict = 'pass' | 'warn' | 'fail';
@@ -563,7 +687,6 @@ type IMConnectivityCheckCode =
   | 'telegram_privacy_mode_hint'
   | 'dingtalk_bot_membership_hint'
   | 'nim_p2p_only_hint'
-  | 'qzhuli_bridge_hint'
   | 'qq_guild_mention_hint';
 
 interface IMConnectivityCheck {
@@ -574,7 +697,7 @@ interface IMConnectivityCheck {
 }
 
 interface IMConnectivityTestResult {
-  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli';
+  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo';
   testedAt: number;
   verdict: IMConnectivityVerdict;
   checks: IMConnectivityCheck[];
@@ -625,15 +748,6 @@ interface NimGatewayStatus {
   lastOutboundAt: number | null;
 }
 
-interface QzhuliGatewayStatus {
-  connected: boolean;
-  startedAt: number | null;
-  lastError: string | null;
-  lastWsUrl: string | null;
-  lastInboundAt: number | null;
-  lastOutboundAt: number | null;
-}
-
 interface XiaomifengGatewayStatus {
   connected: boolean;
   startedAt: number | null;
@@ -660,8 +774,24 @@ interface WecomGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+interface PopoGatewayStatus {
+  connected: boolean;
+  startedAt: number | null;
+  lastError: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+}
+
+interface WeixinGatewayStatus {
+  connected: boolean;
+  startedAt: number | null;
+  lastError: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+}
+
 interface IMMessage {
-  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'qzhuli';
+  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin';
   messageId: string;
   conversationId: string;
   senderId: string;

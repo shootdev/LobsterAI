@@ -11,6 +11,7 @@ import { ScheduledTasksView } from './components/scheduledTasks';
 import { McpView } from './components/mcp';
 import CoworkPermissionModal from './components/cowork/CoworkPermissionModal';
 import CoworkQuestionWizard from './components/cowork/CoworkQuestionWizard';
+import EngineStartupOverlay from './components/cowork/EngineStartupOverlay';
 import { configService } from './services/config';
 import { apiService } from './services/api';
 import { themeService } from './services/theme';
@@ -27,6 +28,7 @@ import { i18nService } from './services/i18n';
 import { matchesShortcut } from './services/shortcuts';
 import AppUpdateBadge from './components/update/AppUpdateBadge';
 import AppUpdateModal from './components/update/AppUpdateModal';
+import PrivacyDialog from './components/PrivacyDialog';
 
 const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
@@ -42,6 +44,7 @@ const App: React.FC = () => {
   const [updateModalState, setUpdateModalState] = useState<'info' | 'downloading' | 'installing' | 'error'>('info');
   const [downloadProgress, setDownloadProgress] = useState<AppUpdateDownloadProgress | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [privacyAgreed, setPrivacyAgreed] = useState<boolean | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const hasInitialized = useRef(false);
   const hasCheckedQzhuliConfig = useRef(false);
@@ -52,6 +55,28 @@ const App: React.FC = () => {
   const pendingPermission = pendingPermissions[0] ?? null;
   const isWindows = window.electron.platform === 'win32';
 
+  const waitWithTimeout = useCallback(
+    async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+      return await new Promise<T>((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        promise.then(
+          (value) => {
+            window.clearTimeout(timer);
+            resolve(value);
+          },
+          (error) => {
+            window.clearTimeout(timer);
+            reject(error);
+          }
+        );
+      });
+    },
+    []
+  );
+
   // 初始化应用
   useEffect(() => {
     if (hasInitialized.current) {
@@ -61,18 +86,23 @@ const App: React.FC = () => {
 
     const initializeApp = async () => {
       try {
+        console.info('[App] initializeApp: start');
         // 标记平台，用于 CSS 条件样式（如 Windows 标题栏按钮区域留白）
         document.documentElement.classList.add(`platform-${window.electron.platform}`);
 
         // 初始化配置
-        await configService.init();
+        console.info('[App] initializeApp: configService.init');
+        await waitWithTimeout(configService.init(), 5000, 'configService.init');
         
         // 初始化主题
+        console.info('[App] initializeApp: themeService.initialize');
         themeService.initialize();
 
         // 初始化语言
-        await i18nService.initialize();
+        console.info('[App] initializeApp: i18nService.initialize');
+        await waitWithTimeout(i18nService.initialize(), 5000, 'i18nService.initialize');
         
+        console.info('[App] initializeApp: configService.getConfig');
         const config = await configService.getConfig();
         
         const apiConfig: ApiConfig = {
@@ -113,11 +143,19 @@ const App: React.FC = () => {
           ) ?? resolvedModels[0];
           dispatch(setSelectedModel(preferredModel));
         }
-        
-        // 初始化定时任务服务
-        await scheduledTaskService.init();
+
+        // 检查隐私协议是否已同意（必须在 setIsInitialized 之前）
+        const agreed = await window.electron.store.get('privacy_agreed');
+        setPrivacyAgreed(agreed === true);
 
         setIsInitialized(true);
+        console.info('[App] initializeApp: shell ready');
+
+        // 初始化定时任务服务，但不阻塞首屏
+        void waitWithTimeout(scheduledTaskService.init(), 5000, 'scheduledTaskService.init').catch((error) => {
+          console.error('[App] initializeApp: scheduledTaskService.init failed:', error);
+        });
+
       } catch (error) {
         console.error('Failed to initialize app:', error);
         setInitError(i18nService.t('initializationError'));
@@ -125,8 +163,8 @@ const App: React.FC = () => {
       }
     };
 
-    initializeApp();
-  }, []);
+    void initializeApp();
+  }, [dispatch, waitWithTimeout]);
 
   useEffect(() => {
     const unsubscribe = i18nService.subscribe(() => {
@@ -364,6 +402,16 @@ const App: React.FC = () => {
     setDownloadProgress(null);
   }, []);
 
+  const handlePrivacyAccept = useCallback(async () => {
+    await window.electron.store.set('privacy_agreed', true);
+    setPrivacyAgreed(true);
+  }, []);
+
+  const handlePrivacyReject = useCallback(() => {
+    // 立刻隐藏窗口，让用户感觉立即关闭
+    window.electron.window.close();
+  }, []);
+
   const handlePermissionResponse = useCallback(async (result: CoworkPermissionResult) => {
     if (!pendingPermission) return;
     await coworkService.respondToPermission(pendingPermission.requestId, result);
@@ -469,19 +517,6 @@ const App: React.FC = () => {
     });
     return unsubscribe;
   }, [handleNewChat]);
-
-  // 监听定时任务查看会话事件
-  useEffect(() => {
-    const handleViewSession = async (event: Event) => {
-      const { sessionId } = (event as CustomEvent).detail;
-      if (sessionId) {
-        setMainView('cowork');
-        await coworkService.loadSession(sessionId);
-      }
-    };
-    window.addEventListener('scheduledTask:viewSession', handleViewSession);
-    return () => window.removeEventListener('scheduledTask:viewSession', handleViewSession);
-  }, []);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -631,7 +666,8 @@ const App: React.FC = () => {
           updateBadge={!isSidebarCollapsed ? updateBadge : null}
         />
         <div className={`flex-1 min-w-0 py-1.5 pr-1.5 ${isSidebarCollapsed ? 'pl-1.5' : ''}`}>
-          <div className="h-full min-h-0 rounded-xl dark:bg-claude-darkBg bg-claude-bg overflow-hidden">
+          <div className="relative h-full min-h-0 rounded-xl dark:bg-claude-darkBg bg-claude-bg overflow-hidden">
+            <EngineStartupOverlay />
             {mainView === 'skills' ? (
               <SkillsView
                 isSidebarCollapsed={isSidebarCollapsed}
@@ -696,6 +732,12 @@ const App: React.FC = () => {
         />
       )}
       {permissionModal}
+      {privacyAgreed === false && (
+        <PrivacyDialog
+          onAccept={handlePrivacyAccept}
+          onReject={handlePrivacyReject}
+        />
+      )}
     </div>
   );
 };

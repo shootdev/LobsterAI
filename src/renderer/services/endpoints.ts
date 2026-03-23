@@ -14,6 +14,11 @@ export const getUpdateCheckUrl = () => isTestMode()
   ? 'https://test.client.qzhuli.com/sys/lobsterai_update_config'
   : 'https://client.qzhuli.com/sys/lobsterai_update_config';
 
+// 手动检查更新
+export const getManualUpdateCheckUrl = () => isTestMode()
+  ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/update-manual'
+  : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/update-manual';
+
 export const getFallbackDownloadUrl = () => isTestMode()
   ? ''
   : '';
