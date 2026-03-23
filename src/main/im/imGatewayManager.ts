@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import { t } from '../i18n';
 import { NimGateway } from './nimGateway';
+import { QzhuliGateway } from './qzhuliGateway';
 import { XiaomifengGateway } from './xiaomifengGateway';
 import { IMChatHandler } from './imChatHandler';
 import { IMCoworkHandler } from './imCoworkHandler';
@@ -66,6 +67,22 @@ interface DiscordUserResponse {
   discriminator?: string;
 }
 
+interface QzhuliBindStatusPayload {
+  status?: number | string;
+  conv_id?: string;
+  conversation_id?: string;
+  cid?: string;
+  token?: string;
+  bind_token?: string;
+  api_model_base_url?: string;
+  apiModelBaseUrl?: string;
+  api_model_key?: string;
+  apiModelKey?: string;
+}
+
+const QZHULI_CLIENT_HOST_DEV = 'test.client.qzhuli.com';
+const QZHULI_CLIENT_HOST_RELEASE = 'client.qzhuli.com';
+
 export interface IMGatewayManagerOptions {
   coworkRuntime?: CoworkRuntime;
   coworkStore?: CoworkStore;
@@ -85,6 +102,7 @@ export interface IMGatewayManagerOptions {
 
 export class IMGatewayManager extends EventEmitter {
   private nimGateway: NimGateway;
+  private qzhuliGateway: QzhuliGateway;
   private xiaomifengGateway: XiaomifengGateway;
   private imStore: IMStore;
   private chatHandler: IMChatHandler | null = null;
@@ -120,6 +138,7 @@ export class IMGatewayManager extends EventEmitter {
 
     this.imStore = new IMStore(db, saveDb);
     this.nimGateway = new NimGateway();
+    this.qzhuliGateway = new QzhuliGateway();
     this.xiaomifengGateway = new XiaomifengGateway();
 
     // Store Cowork dependencies if provided
@@ -147,6 +166,24 @@ export class IMGatewayManager extends EventEmitter {
     // DingTalk runs via OpenClaw; no direct gateway events to forward
 
     // NIM runs via OpenClaw; no direct gateway events to forward
+
+    // QZhuli events
+    this.qzhuliGateway.on('status', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.qzhuliGateway.on('connected', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.qzhuliGateway.on('disconnected', () => {
+      this.emit('statusChange', this.getStatus());
+    });
+    this.qzhuliGateway.on('error', (error) => {
+      this.emit('error', { platform: 'qzhuli', error });
+      this.emit('statusChange', this.getStatus());
+    });
+    this.qzhuliGateway.on('message', (message: IMMessage) => {
+      this.emit('message', message);
+    });
 
     // Xiaomifeng events
     this.xiaomifengGateway.on('status', () => {
@@ -185,6 +222,11 @@ export class IMGatewayManager extends EventEmitter {
     // DingTalk runs via OpenClaw; no direct reconnect needed
 
     // NIM runs via OpenClaw; no direct reconnect needed
+
+    if (this.qzhuliGateway && !this.qzhuliGateway.isConnected()) {
+      console.log('[IMGatewayManager] Reconnecting QZhuli...');
+      this.qzhuliGateway.reconnectIfNeeded();
+    }
 
     if (this.xiaomifengGateway && !this.xiaomifengGateway.isConnected()) {
       console.log('[IMGatewayManager] Reconnecting Xiaomifeng...');
@@ -267,6 +309,7 @@ export class IMGatewayManager extends EventEmitter {
     };
 
     this.nimGateway.setMessageCallback(messageHandler);
+    this.qzhuliGateway.setMessageCallback(messageHandler);
     this.xiaomifengGateway.setMessageCallback(messageHandler);
   }
 
@@ -495,6 +538,7 @@ export class IMGatewayManager extends EventEmitter {
           lastOutboundAt: null as number | null,
         };
       })(),
+      qzhuli: this.qzhuliGateway.getStatus(),
       xiaomifeng: this.xiaomifengGateway.getStatus(),
       wecom: {
         connected: Boolean(config.wecom?.enabled && config.wecom.botId && config.wecom.secret),
@@ -752,6 +796,8 @@ export class IMGatewayManager extends EventEmitter {
       await this.syncOpenClawConfig?.();
       await this.ensureOpenClawGatewayConnected?.();
       return;
+    } else if (platform === 'qzhuli') {
+      await this.qzhuliGateway.start(config.qzhuli);
     } else if (platform === 'xiaomifeng') {
       await this.xiaomifengGateway.start(config.xiaomifeng);
     } else if (platform === 'qq') {
@@ -810,6 +856,8 @@ export class IMGatewayManager extends EventEmitter {
       console.log('[IMGatewayManager] NIM in OpenClaw mode, syncing disabled config');
       await this.syncOpenClawConfig?.();
       return;
+    } else if (platform === 'qzhuli') {
+      await this.qzhuliGateway.stop();
     } else if (platform === 'xiaomifeng') {
       await this.xiaomifengGateway.stop();
     } else if (platform === 'qq') {
@@ -860,6 +908,14 @@ export class IMGatewayManager extends EventEmitter {
       }
     }
 
+    if (config.qzhuli?.enabled && config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken) {
+      try {
+        await this.startGateway('qzhuli');
+      } catch (error: any) {
+        console.error(`[IMGatewayManager] Failed to start QZhuli: ${error.message}`);
+      }
+    }
+
     // --- OpenClaw platforms: collect and batch into a single sync ---
 
     const openClawPlatformsToStart: IMPlatform[] = [];
@@ -905,12 +961,13 @@ export class IMGatewayManager extends EventEmitter {
 
   async stopAll(): Promise<void> {
     await Promise.all([
+      this.qzhuliGateway.stop(),
       this.xiaomifengGateway.stop(),
     ]);
   }
 
   isAnyConnected(): boolean {
-    return this.xiaomifengGateway.isConnected();
+    return this.qzhuliGateway.isConnected() || this.xiaomifengGateway.isConnected();
   }
 
   isConnected(platform: IMPlatform): boolean {
@@ -933,6 +990,9 @@ export class IMGatewayManager extends EventEmitter {
       // NIM runs via OpenClaw; consider it connected when enabled and configured
       const config = this.getConfig();
       return Boolean(config.nim?.enabled && config.nim.appKey && config.nim.account && config.nim.token);
+    }
+    if (platform === 'qzhuli') {
+      return this.qzhuliGateway.isConnected();
     }
     if (platform === 'xiaomifeng') {
       return this.xiaomifengGateway.isConnected();
@@ -966,7 +1026,9 @@ export class IMGatewayManager extends EventEmitter {
     }
 
     try {
-      if (platform === 'nim') {
+      if (platform === 'qzhuli') {
+        await this.qzhuliGateway.sendNotification(text);
+      } else if (platform === 'nim') {
         // NIM runs via OpenClaw; notifications not yet supported via plugin
         console.log('[IMGatewayManager] NIM notification via OpenClaw not yet supported');
       } else if (platform === 'qq') {
@@ -998,7 +1060,9 @@ export class IMGatewayManager extends EventEmitter {
     }
 
     try {
-      if (platform === 'nim') {
+      if (platform === 'qzhuli') {
+        await this.qzhuliGateway.sendNotification(text);
+      } else if (platform === 'nim') {
         // NIM runs via OpenClaw; notifications not yet supported via plugin
         console.log('[IMGatewayManager] NIM notification with media via OpenClaw not yet supported');
       } else if (platform === 'qq') {
@@ -1610,6 +1674,7 @@ export class IMGatewayManager extends EventEmitter {
       telegram: { ...current.telegram, ...(configOverride.telegram || {}) },
       discord: { ...current.discord, ...(configOverride.discord || {}) },
       nim: { ...current.nim, ...(configOverride.nim || {}) },
+      qzhuli: { ...current.qzhuli, ...(configOverride.qzhuli || {}) },
       xiaomifeng: { ...current.xiaomifeng, ...(configOverride.xiaomifeng || {}) },
       wecom: { ...current.wecom, ...(configOverride.wecom || {}) },
       weixin: { ...current.weixin, ...(configOverride.weixin || {}) },
@@ -1639,6 +1704,13 @@ export class IMGatewayManager extends EventEmitter {
       if (!config.nim.appKey) fields.push('appKey');
       if (!config.nim.account) fields.push('account');
       if (!config.nim.token) fields.push('token');
+      return fields;
+    }
+    if (platform === 'qzhuli') {
+      const fields: string[] = [];
+      if (!config.qzhuli.senderCid) fields.push('senderCid');
+      if (!config.qzhuli.convId) fields.push('convId');
+      if (!config.qzhuli.wsToken) fields.push('wsToken');
       return fields;
     }
     if (platform === 'xiaomifeng') {
@@ -1710,6 +1782,14 @@ export class IMGatewayManager extends EventEmitter {
         throw new Error('配置不完整');
       }
       return `云信配置已就绪（Account: ${account}）。`;
+    }
+
+    if (platform === 'qzhuli') {
+      const { senderCid, convId, wsToken } = config.qzhuli;
+      if (!senderCid || !convId || !wsToken) {
+        throw new Error('配置不完整');
+      }
+      return `QZhuli 配置已就绪（SenderCID: ${senderCid}，convId: ${convId}）。`;
     }
 
     if (platform === 'xiaomifeng') {
@@ -1795,6 +1875,9 @@ export class IMGatewayManager extends EventEmitter {
         case 'nim':
           console.log('[IMGatewayManager] NIM conversation reply via OpenClaw not yet supported');
           return false;
+        case 'qzhuli':
+          await this.qzhuliGateway.sendToConversation(conversationId, text, 'assistant');
+          return true;
         case 'xiaomifeng':
           await this.xiaomifengGateway.sendConversationNotification(conversationId, text);
           return true;
@@ -2236,6 +2319,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'dingtalk') return status.dingtalk.startedAt;
     if (platform === 'telegram') return status.telegram.startedAt;
     if (platform === 'nim') return status.nim.startedAt;
+    if (platform === 'qzhuli') return status.qzhuli.startedAt;
     if (platform === 'xiaomifeng') return status.xiaomifeng.startedAt;
     if (platform === 'qq') return status.qq.startedAt;
     if (platform === 'wecom') return status.wecom.startedAt;
@@ -2249,6 +2333,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastInboundAt;
     if (platform === 'telegram') return status.telegram.lastInboundAt;
     if (platform === 'nim') return status.nim.lastInboundAt;
+    if (platform === 'qzhuli') return status.qzhuli.lastInboundAt;
     if (platform === 'xiaomifeng') return status.xiaomifeng.lastInboundAt;
     if (platform === 'qq') return status.qq.lastInboundAt;
     if (platform === 'wecom') return status.wecom.lastInboundAt;
@@ -2262,6 +2347,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.lastOutboundAt;
     if (platform === 'telegram') return status.telegram.lastOutboundAt;
     if (platform === 'nim') return status.nim.lastOutboundAt;
+    if (platform === 'qzhuli') return status.qzhuli.lastOutboundAt;
     if (platform === 'xiaomifeng') return status.xiaomifeng.lastOutboundAt;
     if (platform === 'qq') return status.qq.lastOutboundAt;
     if (platform === 'wecom') return status.wecom.lastOutboundAt;
@@ -2275,6 +2361,7 @@ export class IMGatewayManager extends EventEmitter {
     if (platform === 'feishu') return status.feishu.error;
     if (platform === 'telegram') return status.telegram.lastError;
     if (platform === 'nim') return status.nim.lastError;
+    if (platform === 'qzhuli') return status.qzhuli.lastError;
     if (platform === 'xiaomifeng') return status.xiaomifeng.lastError;
     if (platform === 'qq') return status.qq.lastError;
     if (platform === 'wecom') return status.wecom.lastError;
@@ -2365,6 +2452,48 @@ export class IMGatewayManager extends EventEmitter {
     } catch (err: any) {
       return { success: false, error: err?.message || t('feishuVerifyFailed') };
     }
+  }
+
+  async getQzhuliBindStatus(
+    key: string,
+    environment: 'dev' | 'release'
+  ): Promise<{
+    status: 'pending' | 'bound';
+    convId?: string;
+    cid?: string;
+    token?: string;
+    apiModelBaseUrl?: string;
+    apiModelKey?: string;
+  }> {
+    console.info('[IMGatewayManager] Polling QZhuli bind status', { environment });
+    const host = environment === 'release' ? QZHULI_CLIENT_HOST_RELEASE : QZHULI_CLIENT_HOST_DEV;
+    const url = `https://${host}/aimachine/check_bind_status?bind_key=${encodeURIComponent(key)}`;
+    const response = await fetchJsonWithTimeout<any>(url, {}, CONNECTIVITY_TIMEOUT_MS);
+    const data = (response?.data || response) as QzhuliBindStatusPayload;
+
+    const convId = data.conv_id || data.conversation_id;
+    const token = data.token || data.bind_token;
+    const apiModelBaseUrl = data.api_model_base_url || data.apiModelBaseUrl;
+    const apiModelKey = data.api_model_key || data.apiModelKey;
+    const statusValue = String(data.status ?? '');
+
+    if (statusValue === '1' || statusValue.toLowerCase() === 'bound') {
+      console.info('[IMGatewayManager] QZhuli bind status resolved', { environment, status: 'bound' });
+      return {
+        status: 'bound',
+        convId,
+        cid: data.cid,
+        token,
+        apiModelBaseUrl,
+        apiModelKey,
+      };
+    }
+    console.info('[IMGatewayManager] QZhuli bind status resolved', { environment, status: 'pending' });
+    return {
+      status: 'pending',
+      apiModelBaseUrl,
+      apiModelKey,
+    };
   }
 
   private calculateVerdict(checks: IMConnectivityCheck[]): IMConnectivityVerdict {

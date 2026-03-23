@@ -12,6 +12,7 @@ import {
   QQConfig,
   DiscordOpenClawConfig,
   NimConfig,
+  QzhuliConfig,
   XiaomifengConfig,
   WecomConfig,
   WecomOpenClawConfig,
@@ -26,6 +27,7 @@ import {
   DEFAULT_QQ_CONFIG,
   DEFAULT_DISCORD_OPENCLAW_CONFIG,
   DEFAULT_NIM_CONFIG,
+  DEFAULT_QZHULI_CONFIG,
   DEFAULT_XIAOMIFENG_CONFIG,
   DEFAULT_WECOM_CONFIG,
   DEFAULT_POPO_CONFIG,
@@ -78,7 +80,7 @@ export class IMStore {
    * Migrate existing IM configs to ensure stable defaults.
    */
   private migrateDefaults(): void {
-    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim', 'xiaomifeng', 'qq', 'wecom', 'popo', 'weixin'] as const;
+    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim', 'qzhuli', 'xiaomifeng', 'qq', 'wecom', 'popo', 'weixin'] as const;
     let changed = false;
 
     for (const platform of platforms) {
@@ -352,6 +354,7 @@ export class IMStore {
     const telegram = this.getConfigValue<TelegramOpenClawConfig>('telegramOpenClaw') ?? DEFAULT_TELEGRAM_OPENCLAW_CONFIG;
     const discord = this.getConfigValue<DiscordOpenClawConfig>('discordOpenClaw') ?? DEFAULT_DISCORD_OPENCLAW_CONFIG;
     const nim = this.getConfigValue<NimConfig>('nim') ?? DEFAULT_NIM_CONFIG;
+    const qzhuli = this.getConfigValue<QzhuliConfig>('qzhuli') ?? DEFAULT_QZHULI_CONFIG;
     const xiaomifeng = this.getConfigValue<XiaomifengConfig>('xiaomifeng') ?? DEFAULT_XIAOMIFENG_CONFIG;
     const qq = this.getConfigValue<QQConfig>('qq') ?? DEFAULT_QQ_CONFIG;
     const wecom = this.getConfigValue<WecomOpenClawConfig>('wecomOpenClaw') ?? DEFAULT_WECOM_CONFIG;
@@ -376,6 +379,7 @@ export class IMStore {
       telegram: resolveEnabled(telegram, DEFAULT_TELEGRAM_OPENCLAW_CONFIG),
       discord: resolveEnabled(discord, DEFAULT_DISCORD_OPENCLAW_CONFIG),
       nim: resolveEnabled(nim, DEFAULT_NIM_CONFIG),
+      qzhuli: resolveEnabled(qzhuli, DEFAULT_QZHULI_CONFIG),
       xiaomifeng: resolveEnabled(xiaomifeng, DEFAULT_XIAOMIFENG_CONFIG),
       qq: resolveEnabled(qq, DEFAULT_QQ_CONFIG),
       wecom: resolveEnabled(wecom, DEFAULT_WECOM_CONFIG),
@@ -400,6 +404,9 @@ export class IMStore {
     }
     if (config.nim) {
       this.setNimConfig(config.nim);
+    }
+    if (config.qzhuli) {
+      this.setQzhuliConfig(config.qzhuli);
     }
     if (config.xiaomifeng) {
       this.setXiaomifengConfig(config.xiaomifeng);
@@ -467,6 +474,18 @@ export class IMStore {
   setNimConfig(config: Partial<NimConfig>): void {
     const current = this.getNimConfig();
     this.setConfigValue('nim', { ...current, ...config });
+  }
+
+  // ==================== QZhuli Config ====================
+
+  getQzhuliConfig(): QzhuliConfig {
+    const stored = this.getConfigValue<QzhuliConfig>('qzhuli');
+    return { ...DEFAULT_QZHULI_CONFIG, ...stored };
+  }
+
+  setQzhuliConfig(config: Partial<QzhuliConfig>): void {
+    const current = this.getQzhuliConfig();
+    this.setConfigValue('qzhuli', { ...current, ...config });
   }
 
   // ==================== Xiaomifeng Config ====================

@@ -382,13 +382,28 @@ interface IElectronAPI {
     getConfig: () => Promise<{ success: boolean; config?: IMGatewayConfig; error?: string }>;
     setConfig: (config: Partial<IMGatewayConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
     syncConfig: () => Promise<{ success: boolean; error?: string }>;
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => Promise<{ success: boolean; error?: string }>;
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
+      platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
       configOverride?: Partial<IMGatewayConfig>
     ) => Promise<{ success: boolean; result?: IMConnectivityTestResult; error?: string }>;
     getStatus: () => Promise<{ success: boolean; status?: IMGatewayStatus; error?: string }>;
+    getQzhuliBindStatus: (
+      key: string,
+      environment: 'dev' | 'release'
+    ) => Promise<{
+      success: boolean;
+      result?: {
+        status: 'pending' | 'bound';
+        convId?: string;
+        cid?: string;
+        token?: string;
+        apiModelBaseUrl?: string;
+        apiModelKey?: string;
+      };
+      error?: string;
+    }>;
     getLocalIp: () => Promise<string>;
     getOpenClawConfigSchema: () => Promise<{ success: boolean; result?: { schema: Record<string, unknown>; uiHints: Record<string, Record<string, unknown>> }; error?: string }>;
     weixinQrLoginStart: () => Promise<{ success: boolean; qrDataUrl?: string; message: string; sessionKey?: string }>;
@@ -468,6 +483,7 @@ interface IMGatewayConfig {
   qq: QQConfig;
   discord: DiscordOpenClawConfig;
   nim: NimConfig;
+  qzhuli: QzhuliConfig;
   xiaomifeng: XiaomifengConfig;
   wecom: WecomConfig;
   popo: PopoOpenClawConfig;
@@ -590,6 +606,19 @@ interface NimConfig {
   advanced?: NimAdvancedConfig;
 }
 
+interface QzhuliConfig {
+  enabled: boolean;
+  environment: 'dev' | 'release';
+  convId: string;
+  senderCid: string;
+  wsToken: string;
+  reconnectMs: number;
+  maxReconnectMs: number;
+  maxReconnectAttempts: number;
+  heartbeatMs: number;
+  debug?: boolean;
+}
+
 interface XiaomifengConfig {
   enabled: boolean;
   clientId: string;
@@ -664,6 +693,7 @@ interface IMGatewayStatus {
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
+  qzhuli: QzhuliGatewayStatus;
   xiaomifeng: XiaomifengGatewayStatus;
   wecom: WecomGatewayStatus;
   popo: PopoGatewayStatus;
@@ -697,7 +727,7 @@ interface IMConnectivityCheck {
 }
 
 interface IMConnectivityTestResult {
-  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo';
+  platform: 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo';
   testedAt: number;
   verdict: IMConnectivityVerdict;
   checks: IMConnectivityCheck[];
@@ -744,6 +774,15 @@ interface NimGatewayStatus {
   startedAt: number | null;
   lastError: string | null;
   botAccount: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+}
+
+interface QzhuliGatewayStatus {
+  connected: boolean;
+  startedAt: number | null;
+  lastError: string | null;
+  lastWsUrl: string | null;
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
 }

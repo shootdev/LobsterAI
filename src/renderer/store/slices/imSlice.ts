@@ -13,6 +13,7 @@ import type {
   QQOpenClawConfig,
   DiscordOpenClawConfig,
   NimConfig,
+  QzhuliConfig,
   XiaomifengConfig,
   WecomOpenClawConfig,
   PopoOpenClawConfig,
@@ -52,6 +53,7 @@ const imSlice = createSlice({
         telegram: { ...DEFAULT_IM_CONFIG.telegram, ...(config.telegram || {}) },
         discord: { ...DEFAULT_IM_CONFIG.discord, ...(config.discord || {}) },
         nim: { ...DEFAULT_IM_CONFIG.nim, ...(config.nim || {}) },
+        qzhuli: { ...DEFAULT_IM_CONFIG.qzhuli, ...(config.qzhuli || {}) },
         settings: { ...DEFAULT_IM_CONFIG.settings, ...(config.settings || {}) },
       };
     },
@@ -75,6 +77,9 @@ const imSlice = createSlice({
     },
     setNimConfig: (state, action: PayloadAction<Partial<NimConfig>>) => {
       state.config.nim = { ...state.config.nim, ...action.payload };
+    },
+    setQzhuliConfig: (state, action: PayloadAction<Partial<QzhuliConfig>>) => {
+      state.config.qzhuli = { ...state.config.qzhuli, ...action.payload };
     },
     setXiaomifengConfig: (state, action: PayloadAction<Partial<XiaomifengConfig>>) => {
       state.config.xiaomifeng = { ...state.config.xiaomifeng, ...action.payload };
@@ -101,6 +106,7 @@ const imSlice = createSlice({
         telegram: { ...DEFAULT_IM_STATUS.telegram, ...(status.telegram || {}) },
         discord: { ...DEFAULT_IM_STATUS.discord, ...(status.discord || {}) },
         nim: { ...DEFAULT_IM_STATUS.nim, ...(status.nim || {}) },
+        qzhuli: { ...DEFAULT_IM_STATUS.qzhuli, ...(status.qzhuli || {}) },
       };
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
@@ -123,6 +129,7 @@ export const {
   setQQConfig,
   setDiscordConfig,
   setNimConfig,
+  setQzhuliConfig,
   setXiaomifengConfig,
   setWecomConfig,
   setPopoConfig,

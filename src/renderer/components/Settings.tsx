@@ -753,6 +753,22 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, onUpda
             ...config.providers,  // 覆盖已保存的配置
           };
 
+          // Keep custom provider defaults visible even if persisted custom is empty.
+          const defaultCustom = defaultConfig.providers?.custom;
+          if (defaultCustom && merged.custom) {
+            const custom = merged.custom as ProviderConfig;
+            const isEmpty = !(custom.apiKey?.trim()) && !(custom.baseUrl?.trim());
+            if (isEmpty) {
+              merged.custom = {
+                ...defaultCustom,
+                ...custom,
+                apiKey: defaultCustom.apiKey,
+                baseUrl: defaultCustom.baseUrl,
+                models: (defaultCustom.models?.length ? defaultCustom.models : custom.models) ?? [],
+              } as ProviderConfig;
+            }
+          }
+
           // After merging, find the first enabled provider to set as activeProvider
           // This ensures we don't use stale activeProvider from old config.api.baseUrl
           const firstEnabledProvider = providerKeys.find(providerKey => merged[providerKey]?.enabled);
@@ -2796,7 +2812,19 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, onUpda
         );
 
       case 'im':
-        return <IMSettings />;
+        return (
+          <IMSettings
+            onCustomProviderSynced={(customProvider) => {
+              setProviders((prev) => ({
+                ...prev,
+                custom: {
+                  ...prev.custom,
+                  ...customProvider,
+                },
+              }));
+            }}
+          />
+        );
 
       case 'about':
         return (
@@ -2804,7 +2832,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, onUpda
             {/* Logo & App Name */}
             <img
               src="logo.png"
-              alt="LobsterAI"
+              alt="Q助理电脑机器人"
               className="w-16 h-16 mb-3 cursor-pointer select-none"
               onClick={() => {
                 const next = logoClickCount + 1;
@@ -2814,7 +2842,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, onUpda
                 }
               }}
             />
-            <h3 className="text-lg font-semibold dark:text-claude-darkText text-claude-text">LobsterAI</h3>
+            <h3 className="text-lg font-semibold dark:text-claude-darkText text-claude-text">Q助理电脑机器人</h3>
             <span className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary mt-1">v{appVersion}</span>
 
             {/* Info Card */}

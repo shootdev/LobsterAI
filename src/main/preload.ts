@@ -288,15 +288,17 @@ contextBridge.exposeInMainWorld('electron', {
     syncConfig: () => ipcRenderer.invoke('im:config:sync'),
 
     // Gateway control
-    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:start', platform),
-    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:stop', platform),
+    startGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:start', platform),
+    stopGateway: (platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin') => ipcRenderer.invoke('im:gateway:stop', platform),
     testGateway: (
-      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
+      platform: 'dingtalk' | 'feishu' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin',
       configOverride?: any
     ) => ipcRenderer.invoke('im:gateway:test', platform, configOverride),
 
     // Status
     getStatus: () => ipcRenderer.invoke('im:status:get'),
+    getQzhuliBindStatus: (key: string, environment: 'dev' | 'release') =>
+      ipcRenderer.invoke('im:qzhuli:bindStatus', key, environment),
     getLocalIp: () => ipcRenderer.invoke('im:getLocalIp') as Promise<string>,
     // OpenClaw config schema
     getOpenClawConfigSchema: () => ipcRenderer.invoke('im:openclaw:config-schema'),

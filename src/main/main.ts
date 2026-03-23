@@ -2996,6 +2996,22 @@ if (!gotTheLock) {
     }
   });
 
+  ipcMain.handle('im:qzhuli:bindStatus', async (
+    _event,
+    key: string,
+    environment: 'dev' | 'release'
+  ) => {
+    try {
+      const result = await getIMGatewayManager().getQzhuliBindStatus(key, environment);
+      return { success: true, result };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to poll QZhuli bind status',
+      };
+    }
+  });
+
   ipcMain.handle('im:getLocalIp', () => {
     const nets = os.networkInterfaces();
     for (const name of Object.keys(nets)) {

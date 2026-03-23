@@ -540,7 +540,7 @@ export const DEFAULT_XIAOMIFENG_CONFIG: XiaomifengConfig = {
 
 export const DEFAULT_QZHULI_CONFIG: QzhuliConfig = {
   enabled: false,
-  environment: 'dev',
+  environment: 'release',
   convId: '',
   senderCid: '',
   wsToken: '',

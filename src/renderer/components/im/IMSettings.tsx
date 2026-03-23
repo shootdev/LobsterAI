@@ -9,9 +9,11 @@ import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangl
 import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
 import { RootState } from '../../store';
 import { imService } from '../../services/im';
-import { setDingTalkConfig, setFeishuConfig, setTelegramOpenClawConfig, setQQConfig, setDiscordConfig, setNimConfig, setXiaomifengConfig, setWecomConfig, setWeixinConfig, setPopoConfig, clearError } from '../../store/slices/imSlice';
+import { configService } from '../../services/config';
+import { defaultConfig, type AppConfig } from '../../config';
+import { setDingTalkConfig, setFeishuConfig, setTelegramOpenClawConfig, setQQConfig, setDiscordConfig, setNimConfig, setQzhuliConfig, setXiaomifengConfig, setWecomConfig, setWeixinConfig, setPopoConfig, clearError } from '../../store/slices/imSlice';
 import { i18nService } from '../../services/i18n';
-import type { IMPlatform, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, TelegramOpenClawConfig, DiscordOpenClawConfig, FeishuOpenClawConfig, DingTalkOpenClawConfig, QQOpenClawConfig, WecomOpenClawConfig, PopoOpenClawConfig } from '../../types/im';
+import type { IMPlatform, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, TelegramOpenClawConfig, DiscordOpenClawConfig, FeishuOpenClawConfig, DingTalkOpenClawConfig, QQOpenClawConfig, QzhuliConfig, WecomOpenClawConfig, PopoOpenClawConfig } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import WecomAIBotSDK from '@wecom/wecom-aibot-sdk';
 import { QRCodeSVG } from 'qrcode.react';
@@ -27,6 +29,7 @@ const platformLogos: Record<IMPlatform, string> = {
   telegram: 'telegram.svg',
   discord: 'discord.svg',
   nim: 'nim.png',
+  qzhuli: 'qzhuli.png',
   xiaomifeng: 'xiaomifeng.png',
   weixin: 'weixin.png',
   wecom: 'wecom.png',
@@ -118,7 +121,11 @@ function deepSet(obj: Record<string, unknown>, path: string, value: unknown): Re
   return result;
 }
 
-const IMSettings: React.FC = () => {
+type IMSettingsProps = {
+  onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
+};
+
+const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
   const dispatch = useDispatch();
   const { config, status, isLoading } = useSelector((state: RootState) => state.im);
   const [activePlatform, setActivePlatform] = useState<IMPlatform>('dingtalk');
@@ -128,6 +135,13 @@ const IMSettings: React.FC = () => {
   const [language, setLanguage] = useState<'zh' | 'en'>(i18nService.getLanguage());
   const [allowedUserIdInput, setAllowedUserIdInput] = useState('');
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [qzhuliBindModalOpen, setQzhuliBindModalOpen] = useState(false);
+  const [qzhuliBindKey, setQzhuliBindKey] = useState('');
+  const [qzhuliBindStatus, setQzhuliBindStatus] = useState<'idle' | 'pending' | 'bound' | 'error'>('idle');
+  const [qzhuliBindError, setQzhuliBindError] = useState('');
+  const [qzhuliBindQrReady, setQzhuliBindQrReady] = useState(false);
+  const hasAutoOpenedQzhuliBindRef = useRef(false);
+  const hasNormalizedQzhuliEnvRef = useRef(false);
   // Re-entrancy guard for gateway toggle to prevent rapid ON→OFF→ON
   const [togglingPlatform, setTogglingPlatform] = useState<IMPlatform | null>(null);
   // Track visibility of password fields (eye toggle)
@@ -480,6 +494,142 @@ const IMSettings: React.FC = () => {
       setWecomQuickSetupError(err.message || err.code || 'Unknown error');
     }
   };
+  const qzhuliConfig = config.qzhuli;
+  const handleQzhuliChange = (update: Partial<QzhuliConfig>) => {
+    dispatch(setQzhuliConfig(update));
+  };
+  const hasQzhuliCredentials = Boolean(
+    qzhuliConfig.senderCid.trim()
+    && qzhuliConfig.convId.trim()
+    && qzhuliConfig.wsToken.trim()
+  );
+
+  useEffect(() => {
+    if (!configLoaded || hasNormalizedQzhuliEnvRef.current) {
+      return;
+    }
+    hasNormalizedQzhuliEnvRef.current = true;
+    if (qzhuliConfig.environment !== 'release') {
+      const nextConfig = {
+        ...qzhuliConfig,
+        environment: 'release' as const,
+      };
+      dispatch(setQzhuliConfig({ environment: 'release' }));
+      void imService.persistConfig({ qzhuli: nextConfig });
+    }
+  }, [configLoaded, dispatch, qzhuliConfig]);
+
+  const startQzhuliBindFlow = () => {
+    const key = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+    setQzhuliBindKey(key);
+    setQzhuliBindQrReady(false);
+    setQzhuliBindStatus('pending');
+    setQzhuliBindError('');
+    setQzhuliBindModalOpen(true);
+    setActivePlatform('qzhuli');
+  };
+
+  const handleCloseQzhuliBindModal = () => {
+    setQzhuliBindModalOpen(false);
+  };
+
+  useEffect(() => {
+    if (!qzhuliBindModalOpen) {
+      setQzhuliBindQrReady(false);
+    }
+  }, [qzhuliBindModalOpen]);
+
+  useEffect(() => {
+    if (!configLoaded || hasAutoOpenedQzhuliBindRef.current || hasQzhuliCredentials) {
+      return;
+    }
+    hasAutoOpenedQzhuliBindRef.current = true;
+    startQzhuliBindFlow();
+  }, [configLoaded, hasQzhuliCredentials]);
+
+  const applyQzhuliModelConfigToCustomProvider = async (apiModelBaseUrl?: string, apiModelKey?: string) => {
+    const nextBaseUrl = apiModelBaseUrl?.trim();
+    const nextApiKey = apiModelKey?.trim();
+    if (!nextBaseUrl && !nextApiKey) {
+      return;
+    }
+
+    const appConfig = configService.getConfig();
+    const providers = (appConfig.providers ?? defaultConfig.providers) as NonNullable<AppConfig['providers']>;
+    const customProvider = providers.custom;
+    const updatedProviders: NonNullable<AppConfig['providers']> = {
+      ...providers,
+      custom: {
+        ...customProvider,
+        enabled: true,
+        baseUrl: nextBaseUrl || customProvider.baseUrl,
+        apiKey: nextApiKey || customProvider.apiKey,
+      },
+    };
+
+    await configService.updateConfig({
+      providers: updatedProviders,
+    });
+
+    onCustomProviderSynced?.({
+      enabled: updatedProviders.custom.enabled,
+      baseUrl: updatedProviders.custom.baseUrl,
+      apiKey: updatedProviders.custom.apiKey,
+    });
+  };
+
+  useEffect(() => {
+    if (!qzhuliBindModalOpen || !qzhuliBindKey) {
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const result = await window.electron.im.getQzhuliBindStatus(qzhuliBindKey, qzhuliConfig.environment);
+        if (cancelled) return;
+        if (!result.success || !result.result) {
+          if (result.error) {
+            setQzhuliBindError(result.error);
+            setQzhuliBindStatus('error');
+          }
+          return;
+        }
+        await applyQzhuliModelConfigToCustomProvider(result.result.apiModelBaseUrl, result.result.apiModelKey);
+        if (result.result.status === 'bound') {
+          setQzhuliBindStatus('bound');
+          setQzhuliBindModalOpen(false);
+          if (!(result.result.convId && result.result.cid && result.result.token)) {
+            return;
+          }
+          const nextConfig = {
+            ...qzhuliConfig,
+            convId: result.result.convId,
+            senderCid: result.result.cid,
+            wsToken: result.result.token,
+          };
+          dispatch(setQzhuliConfig(nextConfig));
+          await imService.persistConfig({ qzhuli: nextConfig });
+          if (cancelled) return;
+          return;
+        }
+        setQzhuliBindStatus('pending');
+      } catch (error) {
+        if (!cancelled) {
+          setQzhuliBindError(error instanceof Error ? error.message : i18nService.t('imQzhuliBindPollingFailed'));
+          setQzhuliBindStatus('error');
+        }
+      }
+    };
+
+    void poll();
+    const timer = setInterval(() => {
+      void poll();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [dispatch, onCustomProviderSynced, qzhuliBindModalOpen, qzhuliBindKey, qzhuliConfig]);
 
   const handleWeixinQrLogin = async () => {
     setWeixinQrStatus('loading');
@@ -761,6 +911,7 @@ const IMSettings: React.FC = () => {
   const telegramConnected = status.telegram.connected;
   const discordConnected = status.discord.connected;
   const nimConnected = status.nim.connected;
+  const qzhuliConnected = status.qzhuli?.connected ?? false;
   const xiaomifengConnected = status.xiaomifeng?.connected ?? false;
   const qqConnected = status.qq?.connected ?? false;
   const wecomConnected = status.wecom?.connected ?? false;
@@ -793,6 +944,9 @@ const IMSettings: React.FC = () => {
     }
     if (platform === 'nim') {
       return !!(config.nim.appKey && config.nim.account && config.nim.token);
+    }
+    if (platform === 'qzhuli') {
+      return !!(config.qzhuli.senderCid && config.qzhuli.convId && config.qzhuli.wsToken);
     }
     if (platform === 'xiaomifeng') {
       return !!(config.xiaomifeng.clientId && config.xiaomifeng.secret);
@@ -827,6 +981,7 @@ const IMSettings: React.FC = () => {
     if (platform === 'telegram') return telegramConnected;
     if (platform === 'discord') return discordConnected;
     if (platform === 'nim') return nimConnected;
+    if (platform === 'qzhuli') return qzhuliConnected;
     if (platform === 'xiaomifeng') return xiaomifengConnected;
     if (platform === 'qq') return qqConnected;
     if (platform === 'wecom') return wecomConnected;
@@ -981,6 +1136,7 @@ const IMSettings: React.FC = () => {
       qq: setQQConfig,
       discord: setDiscordConfig,
       nim: setNimConfig,
+      qzhuli: setQzhuliConfig,
       xiaomifeng: setXiaomifengConfig,
       wecom: setWecomConfig,
       weixin: setWeixinConfig,
@@ -2878,6 +3034,96 @@ const IMSettings: React.FC = () => {
           </div>
         )}
 
+        {/* QZhuli Settings */}
+        {activePlatform === 'qzhuli' && (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-dashed dark:border-claude-darkBorder/60 border-claude-border/60 p-4 text-center space-y-2">
+              <button
+                type="button"
+                onClick={startQzhuliBindFlow}
+                className="px-4 py-2.5 rounded-lg text-sm font-medium bg-claude-accent text-white hover:bg-claude-accent/90 transition-colors"
+              >
+                {i18nService.t('imQzhuliScanBtn')}
+              </button>
+              <p className="text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary">
+                {i18nService.t('imQzhuliScanHint')}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                Environment
+              </label>
+              <select
+                value={qzhuliConfig.environment}
+                onChange={(e) => {
+                  handleQzhuliChange({ environment: e.target.value as 'dev' | 'release' });
+                  void imService.persistConfig({ qzhuli: { ...qzhuliConfig, environment: e.target.value as 'dev' | 'release' } });
+                }}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+              >
+                <option value="release">release</option>
+                <option value="dev">dev</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                convId
+              </label>
+              <input
+                type="text"
+                value={qzhuliConfig.convId}
+                onChange={(e) => handleQzhuliChange({ convId: e.target.value })}
+                onBlur={() => void imService.persistConfig({ qzhuli: qzhuliConfig })}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                senderCid
+              </label>
+              <input
+                type="text"
+                value={qzhuliConfig.senderCid}
+                onChange={(e) => handleQzhuliChange({ senderCid: e.target.value })}
+                onBlur={() => void imService.persistConfig({ qzhuli: qzhuliConfig })}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                wsToken
+              </label>
+              <input
+                type={showSecrets['qzhuli.wsToken'] ? 'text' : 'password'}
+                value={qzhuliConfig.wsToken}
+                onChange={(e) => handleQzhuliChange({ wsToken: e.target.value })}
+                onBlur={() => void imService.persistConfig({ qzhuli: qzhuliConfig })}
+                className="block w-full rounded-lg dark:bg-claude-darkSurface/80 bg-claude-surface/80 dark:border-claude-darkBorder/60 border-claude-border/60 border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-sm transition-colors"
+              />
+            </div>
+
+            <div className="pt-1">
+              {renderConnectivityTestButton('qzhuli')}
+            </div>
+
+            {status.qzhuli?.lastWsUrl && (
+              <div className="text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary bg-claude-surface dark:bg-claude-darkSurface px-3 py-2 rounded-lg">
+                WS: {status.qzhuli.lastWsUrl}
+              </div>
+            )}
+
+            {status.qzhuli?.lastError && (
+              <div className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">
+                {status.qzhuli.lastError}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 小蜜蜂设置*/}
         {activePlatform === 'xiaomifeng' && (
           <div className="space-y-3">
@@ -3880,6 +4126,96 @@ const IMSettings: React.FC = () => {
 
               <div className="px-4 py-3 border-t dark:border-claude-darkBorder border-claude-border flex items-center justify-end">
                 {renderConnectivityTestButton(connectivityModalPlatform)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {qzhuliBindModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={handleCloseQzhuliBindModal}
+          >
+            <div
+              className="w-full max-w-[360px] dark:bg-slate-900 bg-white rounded-2xl shadow-2xl border dark:border-slate-700/60 border-slate-200 overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b dark:border-slate-800 border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <img src="ai-robot.png" alt={i18nService.t('qzhuli')} className="w-7 h-7 object-contain rounded-md" />
+                  <span className="text-sm font-semibold dark:text-slate-100 text-slate-800 tracking-tight">
+                    {i18nService.t('qzhuli')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={i18nService.t('close')}
+                  onClick={handleCloseQzhuliBindModal}
+                  className="flex items-center justify-center rounded-full size-7 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:text-slate-400 text-slate-500 transition-colors"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center px-8 pt-8 pb-9 text-center">
+                <h1 className="text-lg font-bold dark:text-slate-100 text-slate-900 mb-7 tracking-tight">
+                  {i18nService.t('imQzhuliBindModalTitle')}
+                </h1>
+
+                <div className="relative">
+                  <div className="p-3.5 bg-white dark:bg-slate-800 rounded-2xl border-2 dark:border-slate-700 border-slate-100 shadow-sm transition-colors">
+                    <div className="size-48 bg-slate-100 dark:bg-slate-700 rounded-xl overflow-hidden flex items-center justify-center relative">
+                      {qzhuliBindQrReady ? null : (
+                        <div className="w-full h-full animate-pulse bg-slate-200 dark:bg-slate-600 rounded-xl" />
+                      )}
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(JSON.stringify({ type: 'imnut_bind', key: qzhuliBindKey, id: 2 }))}`}
+                        alt="QZhuli bind QR"
+                        onLoad={() => setQzhuliBindQrReady(true)}
+                        onError={() => setQzhuliBindQrReady(false)}
+                        className={`${qzhuliBindQrReady ? 'opacity-100' : 'opacity-0'} absolute inset-0 w-full h-full object-contain p-1.5 transition-opacity`}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="bg-white dark:bg-slate-800 p-1 rounded-md shadow-md border border-slate-100 dark:border-slate-700">
+                          <img src="qzhuli.png" alt="" className="w-7 h-7 object-contain" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="absolute -top-1 -right-1 flex h-3.5 w-3.5 z-10">
+                    {qzhuliBindStatus === 'bound' ? (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500" />
+                      </>
+                    ) : qzhuliBindStatus === 'error' ? (
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500" />
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#135bec] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#135bec]" />
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-7 flex flex-col items-center gap-2">
+                  {qzhuliBindStatus === 'bound' ? (
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                      {i18nService.t('imQzhuliBindSuccess')}
+                    </p>
+                  ) : qzhuliBindError ? (
+                    <p className="text-sm text-red-500 dark:text-red-400">{qzhuliBindError}</p>
+                  ) : (
+                    <p className="text-sm font-medium dark:text-slate-200 text-slate-700">
+                      {i18nService.t('imQzhuliBindModalHint')}
+                    </p>
+                  )}
+                  <p className="text-xs dark:text-slate-500 text-slate-400">
+                    {i18nService.t('imQzhuliBindModalSubHint')}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
