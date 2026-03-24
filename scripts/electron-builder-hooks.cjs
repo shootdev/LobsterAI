@@ -101,26 +101,45 @@ function verifyPreinstalledPlugins(runtimeRoot, buildHint) {
     return;
   }
 
-  const extensionsDir = path.join(runtimeRoot, 'extensions');
-  const missing = [];
+  const { missingRequired, missingOptional } = classifyMissingPreinstalledPlugins(runtimeRoot, plugins);
 
-  for (const plugin of plugins) {
-    if (!plugin.id) continue;
-    const pluginDir = path.join(extensionsDir, plugin.id);
-    if (!existsSync(pluginDir)) {
-      missing.push(plugin.id);
-    }
+  if (missingOptional.length > 0) {
+    console.warn(
+      '[electron-builder-hooks] Optional OpenClaw plugins missing from runtime: '
+      + missingOptional.join(', ')
+      + '. Packaging will continue.',
+    );
   }
 
-  if (missing.length > 0) {
+  if (missingRequired.length > 0) {
     throw new Error(
       '[electron-builder-hooks] Preinstalled OpenClaw plugins missing from runtime: '
-      + missing.join(', ')
+      + missingRequired.join(', ')
       + `. Run \`${buildHint}\` (which includes openclaw:plugins) before packaging.`,
     );
   }
 
   console.log(`[electron-builder-hooks] Verified ${plugins.length} preinstalled OpenClaw plugin(s).`);
+}
+
+function classifyMissingPreinstalledPlugins(runtimeRoot, plugins) {
+  const extensionsDir = path.join(runtimeRoot, 'extensions');
+  const missingRequired = [];
+  const missingOptional = [];
+
+  for (const plugin of plugins) {
+    if (!plugin || !plugin.id) continue;
+    const pluginDir = path.join(extensionsDir, plugin.id);
+    if (existsSync(pluginDir)) continue;
+
+    if (plugin.optional) {
+      missingOptional.push(plugin.id);
+    } else {
+      missingRequired.push(plugin.id);
+    }
+  }
+
+  return { missingRequired, missingOptional };
 }
 
 function ensureBundledOpenClawRuntime(context) {
@@ -563,4 +582,7 @@ async function afterPack(context) {
 module.exports = {
   beforePack,
   afterPack,
+  __test__: {
+    classifyMissingPreinstalledPlugins,
+  },
 };
