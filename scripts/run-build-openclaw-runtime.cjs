@@ -99,7 +99,27 @@ if (process.platform === 'win32') {
 // Use a relative path so bash never sees Windows drive-letter paths like
 // "D:/..." which can fail when invoked through nested npm/cmd.exe chains.
 const scriptPath = 'scripts/build-openclaw-runtime.sh';
-const result = spawnSync(bashExecutable, [scriptPath, targetId], {
+
+let command = bashExecutable;
+let args = [scriptPath, targetId];
+
+// On macOS, if the host arch (process.arch) is different from the target arch,
+// we should use the 'arch' command to force the shell to run in the target mode.
+// This is critical for native module compilation/fetching during 'npm install'.
+// e.g. on arm64 host, building for x64: 'arch -x86_64 bash ...'
+if (process.platform === 'darwin') {
+  const hostArch = process.arch; // 'arm64' or 'x64'
+  const targetArch = targetId.split('-')[1]; // 'arm64' or 'x64'
+  
+  if (targetArch && hostArch !== targetArch) {
+    const archFlag = targetArch === 'x64' ? '-x86_64' : '-arm64';
+    console.log(`[run-build-openclaw-runtime] Cross-compiling detected (host=${hostArch}, target=${targetArch}). Using: arch ${archFlag}`);
+    command = 'arch';
+    args = [archFlag, bashExecutable, scriptPath, targetId];
+  }
+}
+
+const result = spawnSync(command, args, {
   cwd: rootDir,
   env,
   stdio: 'inherit',

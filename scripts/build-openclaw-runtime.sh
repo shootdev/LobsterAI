@@ -209,10 +209,19 @@ rm -rf node_modules package-lock.json
 npm pkg delete devDependencies >/dev/null 2>&1 || true
 
 echo "[openclaw-runtime] npm target platform=$NPM_TARGET_PLATFORM arch=$NPM_TARGET_ARCH"
-NPM_CONFIG_LEGACY_PEER_DEPS=true \
-npm_config_platform="$NPM_TARGET_PLATFORM" \
-npm_config_arch="$NPM_TARGET_ARCH" \
+export NPM_CONFIG_LEGACY_PEER_DEPS=true
+export npm_config_platform="$NPM_TARGET_PLATFORM"
+export npm_config_arch="$NPM_TARGET_ARCH"
 npm install --omit=dev --no-audit --no-fund
+
+# Diagnostic: verify the architecture of bundled native modules.
+# This helps catch mismatch errors (e.g. bundled ARM64 module in an x64 package) early in the build logs.
+if command -v file >/dev/null 2>&1; then
+  echo "[openclaw-runtime] Verifying architecture of native modules (.node files)..."
+  find node_modules -name "*.node" -type f | while read -r node_file; do
+    echo "[openclaw-runtime]   $node_file: $(file "$node_file" | cut -d: -f2-)"
+  done
+fi
 
 # Runtime sanity checks before packing gateway.asar
 [[ -f "openclaw.mjs" ]]
