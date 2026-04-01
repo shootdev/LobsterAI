@@ -46,22 +46,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SYNC-01 | Unmapped | Pending |
-| SYNC-02 | Unmapped | Pending |
-| SYNC-03 | Unmapped | Pending |
-| PAR-01 | Unmapped | Pending |
-| PAR-02 | Unmapped | Pending |
-| PAR-03 | Unmapped | Pending |
-| VER-01 | Unmapped | Pending |
-| VER-02 | Unmapped | Pending |
-| DOC-01 | Unmapped | Pending |
-| DOC-02 | Unmapped | Pending |
+| SYNC-01 | Phase 1 | Pending |
+| SYNC-02 | Phase 1 | Pending |
+| SYNC-03 | Phase 2 | Pending |
+| PAR-01 | Phase 2 | Pending |
+| PAR-02 | Phase 2 | Pending |
+| PAR-03 | Phase 2 | Pending |
+| VER-01 | Phase 3 | Pending |
+| VER-02 | Phase 3 | Pending |
+| DOC-01 | Phase 4 | Pending |
+| DOC-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial definition*
+*Last updated: 2026-04-01 after roadmap traceability mapping*
