@@ -130,6 +130,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const folderButtonRef = useRef<HTMLButtonElement>(null);
     const dragDepthRef = useRef(0);
+    const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 暴露方法给父组件
   React.useImperativeHandle(ref, () => ({
@@ -208,6 +209,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     window.addEventListener('cowork:focus-input', handleFocusInput);
     return () => {
       window.removeEventListener('cowork:focus-input', handleFocusInput);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
     };
   }, []);
 
@@ -234,6 +236,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
   const handleSubmit = useCallback(async () => {
     if (showFolderSelector && !workingDirectory?.trim()) {
       setShowFolderRequiredWarning(true);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      warningTimerRef.current = setTimeout(() => {
+        setShowFolderRequiredWarning(false);
+        warningTimerRef.current = null;
+      }, 3000);
       return;
     }
 
@@ -687,7 +694,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                           ref={folderButtonRef as React.RefObject<HTMLButtonElement>}
                           type="button"
                           onClick={() => setShowFolderMenu(!showFolderMenu)}
-                          className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg text-sm text-secondary hover:bg-surface-raised hover:text-foreground transition-colors"
+                          className={`flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg text-sm transition-colors ${
+                            showFolderRequiredWarning
+                              ? 'ring-1 ring-warning text-warning animate-shake'
+                              : 'text-secondary hover:bg-surface-raised hover:text-foreground'
+                          }`}
                         >
                           <FolderIcon className="h-4 w-4 flex-shrink-0" />
                           <span className="max-w-[150px] truncate text-xs">
@@ -715,6 +726,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                       onSelectFolder={handleFolderSelect}
                       anchorRef={folderButtonRef as React.RefObject<HTMLElement>}
                     />
+                    {showFolderRequiredWarning && (
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 rounded-md bg-surface-raised text-warning text-xs whitespace-nowrap animate-fade-in-up shadow-subtle z-10">
+                        {i18nService.t('coworkSelectFolderFirst')}
+                      </div>
+                    )}
                   </>
                 )}
                 {showModelSelector && !remoteManaged && (
@@ -824,11 +840,6 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
           </>
         )}
       </div>
-      {showFolderRequiredWarning && (
-        <div className="mt-2 text-xs text-red-500 dark:text-red-400">
-          {i18nService.t('coworkSelectFolderFirst')}
-        </div>
-      )}
     </div>
   );
   }
