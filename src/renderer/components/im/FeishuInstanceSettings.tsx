@@ -4,8 +4,9 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import { ArrowPathIcon, CheckCircleIcon, EyeIcon, EyeSlashIcon, SignalIcon, TrashIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
+import { ArrowPathIcon, CheckCircleIcon, SignalIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import TrashIcon from '../icons/TrashIcon';
 import { QRCodeSVG } from 'qrcode.react';
 import type { FeishuInstanceConfig, FeishuInstanceStatus, FeishuOpenClawConfig, IMConnectivityTestResult } from '../../types/im';
 import { i18nService } from '../../services/i18n';
@@ -286,7 +287,9 @@ const FeishuInstanceSettings: React.FC<FeishuInstanceSettingsProps> = ({
           onClick={onToggleEnabled}
           disabled={!instance.enabled && !(instance.appId && instance.appSecret)}
           className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-            instance.enabled ? 'bg-primary' : 'bg-gray-400 dark:bg-gray-600'
+            instance.enabled
+              ? (instanceStatus?.connected ? 'bg-green-500' : 'bg-yellow-500')
+              : 'bg-gray-400 dark:bg-gray-600'
           } ${!instance.enabled && !(instance.appId && instance.appSecret) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           title={instance.enabled
             ? (language === 'zh' ? '禁用此实例' : 'Disable this instance')
@@ -303,10 +306,10 @@ const FeishuInstanceSettings: React.FC<FeishuInstanceSettingsProps> = ({
         <button
           type="button"
           onClick={onDelete}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
           title={language === 'zh' ? '删除此实例' : 'Delete this instance'}
         >
-          <TrashIcon className="h-3.5 w-3.5" />
+          <TrashIcon className="h-4 w-4" />
           {language === 'zh' ? '删除' : 'Delete'}
         </button>
       </div>
