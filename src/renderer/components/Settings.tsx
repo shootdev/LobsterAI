@@ -2754,7 +2754,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
                       }}
                       className="flex flex-col items-center rounded-xl border-2 p-2 transition-colors cursor-pointer"
                       style={{
-                        borderColor: isSelected ? 'var(--lobster-primary)' : undefined,
+                        borderColor: isSelected ? 'var(--lobster-primary)' : 'var(--lobster-border)',
                         backgroundColor: isSelected ? 'var(--lobster-primary-muted)' : undefined,
                       }}
                     >
