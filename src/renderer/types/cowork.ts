@@ -51,6 +51,8 @@ export interface CoworkSession {
   executionMode: CoworkExecutionMode;
   activeSkillIds: string[];
   agentId: string;
+  modelId?: string;
+  providerKey?: string;
   messages: CoworkMessage[];
   createdAt: number;
   updatedAt: number;
@@ -154,6 +156,8 @@ export interface CoworkSessionSummary {
   status: CoworkSessionStatus;
   pinned: boolean;
   agentId?: string;
+  modelId?: string;
+  providerKey?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -167,6 +171,8 @@ export interface CoworkStartOptions {
   activeSkillIds?: string[];
   agentId?: string;
   imageAttachments?: CoworkImageAttachment[];
+  modelId?: string;
+  providerKey?: string;
 }
 
 // Continue session options

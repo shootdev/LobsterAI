@@ -5,6 +5,7 @@ import { PhotoIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import PaperClipIcon from '../icons/PaperClipIcon';
 import XMarkIcon from '../icons/XMarkIcon';
 import ModelSelector from '../ModelSelector';
+import type { Model } from '../../store/slices/modelSlice';
 import Tooltip from '../ui/Tooltip';
 import FolderSelectorPopover from './FolderSelectorPopover';
 import { SkillsButton, ActiveSkillBadge } from '../skills';
@@ -88,6 +89,8 @@ interface CoworkPromptInputProps {
   onWorkingDirectoryChange?: (dir: string) => void;
   showFolderSelector?: boolean;
   showModelSelector?: boolean;
+  sessionModel?: Model | null;
+  onSessionModelChange?: (model: Model | null) => void;
   onManageSkills?: () => void;
   sessionId?: string;
   /** When true, hides attachment/skill buttons but keeps the input box visible (disabled) */
@@ -107,6 +110,8 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
       onWorkingDirectoryChange,
       showFolderSelector = false,
       showModelSelector = false,
+      sessionModel,
+      onSessionModelChange,
       onManageSkills,
       sessionId,
       remoteManaged = false,
@@ -712,7 +717,15 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                     />
                   </>
                 )}
-                {showModelSelector && !remoteManaged && <ModelSelector dropdownDirection="up" />}
+                {showModelSelector && !remoteManaged && (
+                  <ModelSelector
+                    dropdownDirection="up"
+                    {...(onSessionModelChange ? {
+                      value: sessionModel ?? selectedModel ?? null,
+                      onChange: onSessionModelChange,
+                    } : {})}
+                  />
+                )}
                 {!remoteManaged && (
                   <button
                     type="button"
