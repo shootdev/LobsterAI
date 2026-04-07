@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -6,16 +6,12 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   SparklesIcon,
-} from "@heroicons/react/24/outline";
-import {
-  EyeIcon,
-  EyeSlashIcon,
-  XCircleIcon as XCircleIconSolid,
-} from "@heroicons/react/20/solid";
-import { i18nService } from "../../services/i18n";
-import { skillService } from "../../services/skill";
+} from '@heroicons/react/24/outline';
+import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
+import { i18nService } from '../../services/i18n';
+import { skillService } from '../../services/skill';
 
-const SKILL_ID = "imap-smtp-email";
+const SKILL_ID = 'imap-smtp-email';
 
 interface ProviderPreset {
   label: string;
@@ -28,111 +24,105 @@ interface ProviderPreset {
 }
 
 type EmailConnectivityCheck = {
-  code: "imap_connection" | "smtp_connection";
-  level: "pass" | "fail";
+  code: 'imap_connection' | 'smtp_connection';
+  level: 'pass' | 'fail';
   message: string;
   durationMs: number;
 };
 
 type EmailConnectivityTestResult = {
   testedAt: number;
-  verdict: "pass" | "fail";
+  verdict: 'pass' | 'fail';
   checks: EmailConnectivityCheck[];
 };
 
 const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   gmail: {
-    label: "Gmail",
-    imapHost: "imap.gmail.com",
-    imapPort: "993",
-    smtpHost: "smtp.gmail.com",
-    smtpPort: "587",
-    smtpSecure: "false",
-    hint: "emailHintGmail",
+    label: 'Gmail',
+    imapHost: 'imap.gmail.com',
+    imapPort: '993',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: '587',
+    smtpSecure: 'false',
+    hint: 'emailHintGmail',
   },
   outlook: {
-    label: "Outlook",
-    imapHost: "outlook.office365.com",
-    imapPort: "993",
-    smtpHost: "smtp.office365.com",
-    smtpPort: "587",
-    smtpSecure: "false",
+    label: 'Outlook',
+    imapHost: 'outlook.office365.com',
+    imapPort: '993',
+    smtpHost: 'smtp.office365.com',
+    smtpPort: '587',
+    smtpSecure: 'false',
   },
-  "163": {
-    label: "163.com",
-    imapHost: "imap.163.com",
-    imapPort: "993",
-    smtpHost: "smtp.163.com",
-    smtpPort: "465",
-    smtpSecure: "true",
-    hint: "emailHint163",
+  '163': {
+    label: '163.com',
+    imapHost: 'imap.163.com',
+    imapPort: '993',
+    smtpHost: 'smtp.163.com',
+    smtpPort: '465',
+    smtpSecure: 'true',
+    hint: 'emailHint163',
   },
-  "126": {
-    label: "126.com",
-    imapHost: "imap.126.com",
-    imapPort: "993",
-    smtpHost: "smtp.126.com",
-    smtpPort: "465",
-    smtpSecure: "true",
-    hint: "emailHint163",
+  '126': {
+    label: '126.com',
+    imapHost: 'imap.126.com',
+    imapPort: '993',
+    smtpHost: 'smtp.126.com',
+    smtpPort: '465',
+    smtpSecure: 'true',
+    hint: 'emailHint163',
   },
   qq: {
-    label: "QQ Mail",
-    imapHost: "imap.qq.com",
-    imapPort: "993",
-    smtpHost: "smtp.qq.com",
-    smtpPort: "587",
-    smtpSecure: "false",
-    hint: "emailHintQQ",
+    label: 'QQ Mail',
+    imapHost: 'imap.qq.com',
+    imapPort: '993',
+    smtpHost: 'smtp.qq.com',
+    smtpPort: '587',
+    smtpSecure: 'false',
+    hint: 'emailHintQQ',
   },
   custom: {
-    label: "",
-    imapHost: "",
-    imapPort: "993",
-    smtpHost: "",
-    smtpPort: "587",
-    smtpSecure: "false",
+    label: '',
+    imapHost: '',
+    imapPort: '993',
+    smtpHost: '',
+    smtpPort: '587',
+    smtpSecure: 'false',
   },
 };
 
 const detectProvider = (config: Record<string, string>): string => {
-  const imapHost = (config.IMAP_HOST || "").toLowerCase();
-  if (imapHost.includes("gmail")) return "gmail";
-  if (imapHost.includes("outlook") || imapHost.includes("office365"))
-    return "outlook";
-  if (imapHost === "imap.163.com") return "163";
-  if (imapHost === "imap.126.com") return "126";
-  if (imapHost.includes("qq.com")) return "qq";
-  if (imapHost) return "custom";
-  return "";
+  const imapHost = (config.IMAP_HOST || '').toLowerCase();
+  if (imapHost.includes('gmail')) return 'gmail';
+  if (imapHost.includes('outlook') || imapHost.includes('office365')) return 'outlook';
+  if (imapHost === 'imap.163.com') return '163';
+  if (imapHost === 'imap.126.com') return '126';
+  if (imapHost.includes('qq.com')) return 'qq';
+  if (imapHost) return 'custom';
+  return '';
 };
 
-const normalizeConfig = (
-  config: Partial<Record<string, string>>,
-): Record<string, string> => ({
-  IMAP_HOST: config.IMAP_HOST ?? "",
-  IMAP_PORT: config.IMAP_PORT ?? "993",
-  IMAP_USER: config.IMAP_USER ?? "",
-  IMAP_PASS: config.IMAP_PASS ?? "",
-  IMAP_TLS: config.IMAP_TLS ?? "true",
-  IMAP_REJECT_UNAUTHORIZED: config.IMAP_REJECT_UNAUTHORIZED ?? "true",
-  IMAP_MAILBOX: config.IMAP_MAILBOX ?? "INBOX",
-  SMTP_HOST: config.SMTP_HOST ?? "",
-  SMTP_PORT: config.SMTP_PORT ?? "587",
-  SMTP_SECURE: config.SMTP_SECURE ?? "false",
-  SMTP_USER: config.SMTP_USER ?? "",
-  SMTP_PASS: config.SMTP_PASS ?? "",
-  SMTP_FROM: config.SMTP_FROM ?? "",
-  SMTP_REJECT_UNAUTHORIZED: config.SMTP_REJECT_UNAUTHORIZED ?? "true",
+const normalizeConfig = (config: Partial<Record<string, string>>): Record<string, string> => ({
+  IMAP_HOST: config.IMAP_HOST ?? '',
+  IMAP_PORT: config.IMAP_PORT ?? '993',
+  IMAP_USER: config.IMAP_USER ?? '',
+  IMAP_PASS: config.IMAP_PASS ?? '',
+  IMAP_TLS: config.IMAP_TLS ?? 'true',
+  IMAP_REJECT_UNAUTHORIZED: config.IMAP_REJECT_UNAUTHORIZED ?? 'true',
+  IMAP_MAILBOX: config.IMAP_MAILBOX ?? 'INBOX',
+  SMTP_HOST: config.SMTP_HOST ?? '',
+  SMTP_PORT: config.SMTP_PORT ?? '587',
+  SMTP_SECURE: config.SMTP_SECURE ?? 'false',
+  SMTP_USER: config.SMTP_USER ?? '',
+  SMTP_PASS: config.SMTP_PASS ?? '',
+  SMTP_FROM: config.SMTP_FROM ?? '',
+  SMTP_REJECT_UNAUTHORIZED: config.SMTP_REJECT_UNAUTHORIZED ?? 'true',
 });
 
-const configsEqual = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
+const configsEqual = (a: Record<string, string>, b: Record<string, string>): boolean => {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
-    if ((a[key] ?? "") !== (b[key] ?? "")) {
+    if ((a[key] ?? '') !== (b[key] ?? '')) {
       return false;
     }
   }
@@ -144,37 +134,34 @@ interface EmailSkillConfigProps {
 }
 
 const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
-  const [provider, setProvider] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [provider, setProvider] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [imapHost, setImapHost] = useState("");
-  const [imapPort, setImapPort] = useState("993");
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("587");
-  const [smtpSecure, setSmtpSecure] = useState("false");
-  const [imapTls, setImapTls] = useState("true");
-  const [rejectUnauthorized, setRejectUnauthorized] = useState("true");
-  const [mailbox, setMailbox] = useState("INBOX");
+  const [imapHost, setImapHost] = useState('');
+  const [imapPort, setImapPort] = useState('993');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [smtpSecure, setSmtpSecure] = useState('false');
+  const [imapTls, setImapTls] = useState('true');
+  const [rejectUnauthorized, setRejectUnauthorized] = useState('true');
+  const [mailbox, setMailbox] = useState('INBOX');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isPersisting, setIsPersisting] = useState(false);
   const [showPersisting, setShowPersisting] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [connectivityResult, setConnectivityResult] =
-    useState<EmailConnectivityTestResult | null>(null);
-  const [connectivityError, setConnectivityError] = useState<string | null>(
+  const [connectivityResult, setConnectivityResult] = useState<EmailConnectivityTestResult | null>(
     null,
   );
+  const [connectivityError, setConnectivityError] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
   const persistInFlightRef = useRef(false);
   const persistQueuedRef = useRef(false);
   const latestConfigRef = useRef<Record<string, string>>(normalizeConfig({}));
-  const lastPersistedConfigRef = useRef<Record<string, string>>(
-    normalizeConfig({}),
-  );
+  const lastPersistedConfigRef = useRef<Record<string, string>>(normalizeConfig({}));
   const persistIndicatorTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -188,8 +175,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
       if (config.SMTP_PORT) setSmtpPort(config.SMTP_PORT);
       if (config.SMTP_SECURE) setSmtpSecure(config.SMTP_SECURE);
       if (config.IMAP_TLS) setImapTls(config.IMAP_TLS);
-      if (config.IMAP_REJECT_UNAUTHORIZED)
-        setRejectUnauthorized(config.IMAP_REJECT_UNAUTHORIZED);
+      if (config.IMAP_REJECT_UNAUTHORIZED) setRejectUnauthorized(config.IMAP_REJECT_UNAUTHORIZED);
       if (config.IMAP_MAILBOX) setMailbox(config.IMAP_MAILBOX);
 
       const detected = detectProvider(config);
@@ -268,10 +254,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
     while (persistQueuedRef.current) {
       persistQueuedRef.current = false;
       const configToPersist = latestConfigRef.current;
-      const success = await skillService.setSkillConfig(
-        SKILL_ID,
-        configToPersist,
-      );
+      const success = await skillService.setSkillConfig(SKILL_ID, configToPersist);
       if (!isMountedRef.current) {
         continue;
       }
@@ -279,7 +262,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
         lastPersistedConfigRef.current = configToPersist;
         setPersistError(null);
       } else {
-        setPersistError(i18nService.t("emailConfigError"));
+        setPersistError(i18nService.t('emailConfigError'));
       }
     }
 
@@ -306,7 +289,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
-    if (newProvider && newProvider !== "custom") {
+    if (newProvider && newProvider !== 'custom') {
       const preset = PROVIDER_PRESETS[newProvider];
       if (preset) {
         setImapHost(preset.imapHost);
@@ -314,19 +297,19 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
         setSmtpHost(preset.smtpHost);
         setSmtpPort(preset.smtpPort);
         setSmtpSecure(preset.smtpSecure);
-        setImapTls("true");
+        setImapTls('true');
       }
       return;
     }
 
-    if (newProvider === "custom") {
+    if (newProvider === 'custom') {
       const customPreset = PROVIDER_PRESETS.custom;
       setImapHost(customPreset.imapHost);
       setImapPort(customPreset.imapPort);
       setSmtpHost(customPreset.smtpHost);
       setSmtpPort(customPreset.smtpPort);
       setSmtpSecure(customPreset.smtpSecure);
-      setImapTls("true");
+      setImapTls('true');
     }
   };
 
@@ -334,64 +317,51 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
     setConnectivityError(null);
     setConnectivityResult(null);
     setIsTesting(true);
-    const result = await skillService.testEmailConnectivity(
-      SKILL_ID,
-      buildConfig(),
-    );
+    const result = await skillService.testEmailConnectivity(SKILL_ID, buildConfig());
     if (result) {
       setConnectivityResult(result);
     } else {
-      setConnectivityError(i18nService.t("connectionFailed"));
+      setConnectivityError(i18nService.t('connectionFailed'));
     }
     setIsTesting(false);
   };
 
   const buildAskAIPrompt = useCallback(
-    (
-      result: EmailConnectivityTestResult | null,
-      genericError: string | null,
-    ): string => {
+    (result: EmailConnectivityTestResult | null, genericError: string | null): string => {
       const providerLabel =
-        provider && provider !== "custom"
+        provider && provider !== 'custom'
           ? (PROVIDER_PRESETS[provider]?.label ?? provider)
-          : imapHost || smtpHost || "custom";
+          : imapHost || smtpHost || 'custom';
 
       const lines: string[] = [];
-      lines.push(
-        "我在配置邮件的 IMAP/SMTP 连接时遇到了问题，请帮我排查并给出解决方案。",
-      );
-      lines.push("");
+      lines.push('我在配置邮件的 IMAP/SMTP 连接时遇到了问题，请帮我排查并给出解决方案。');
+      lines.push('');
       lines.push(`邮件服务商：${providerLabel}`);
       if (email) lines.push(`邮件地址：${email}`);
       if (imapHost) lines.push(`IMAP 服务器：${imapHost}:${imapPort}`);
       if (smtpHost) lines.push(`SMTP 服务器：${smtpHost}:${smtpPort}`);
-      lines.push("");
-      lines.push("连接测试失败，错误信息如下：");
+      lines.push('');
+      lines.push('连接测试失败，错误信息如下：');
 
       if (result) {
-        result.checks.forEach((check) => {
-          const label = check.code === "imap_connection" ? "IMAP" : "SMTP";
-          const status = check.level === "pass" ? "成功" : "失败";
-          lines.push(
-            `- ${label} 连接${status}：${check.message}（耗时 ${check.durationMs}ms）`,
-          );
+        result.checks.forEach(check => {
+          const label = check.code === 'imap_connection' ? 'IMAP' : 'SMTP';
+          const status = check.level === 'pass' ? '成功' : '失败';
+          lines.push(`- ${label} 连接${status}：${check.message}（耗时 ${check.durationMs}ms）`);
         });
       } else if (genericError) {
         lines.push(`- ${genericError}`);
       }
 
-      return lines.join("\n");
+      return lines.join('\n');
     },
     [provider, email, imapHost, imapPort, smtpHost, smtpPort],
   );
 
   const handleAskAI = useCallback(
-    (
-      result: EmailConnectivityTestResult | null,
-      genericError: string | null,
-    ) => {
+    (result: EmailConnectivityTestResult | null, genericError: string | null) => {
       const text = buildAskAIPrompt(result, genericError);
-      window.dispatchEvent(new CustomEvent("app:ask-ai", { detail: text }));
+      window.dispatchEvent(new CustomEvent('app:ask-ai', { detail: text }));
     },
     [buildAskAIPrompt],
   );
@@ -399,64 +369,53 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
   const currentPreset = provider ? PROVIDER_PRESETS[provider] : null;
   const hintKey = currentPreset?.hint;
   const canTest = Boolean(email && password && imapHost && smtpHost);
-  const connectivityPassed = connectivityResult?.verdict === "pass";
+  const connectivityPassed = connectivityResult?.verdict === 'pass';
 
   const inputClassName =
-    "block w-full rounded-xl bg-claude-surfaceInset dark:bg-claude-darkSurfaceInset dark:border-claude-darkBorder border-claude-border border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-xs";
-  const labelClassName =
-    "block text-xs font-medium dark:text-claude-darkText text-claude-text mb-1";
+    'block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-xs';
+  const labelClassName = 'block text-xs font-medium text-foreground mb-1';
 
   if (loading) {
-    return (
-      <div className="p-4 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-        {i18nService.t("loading")}...
-      </div>
-    );
+    return <div className="p-4 text-xs text-secondary">{i18nService.t('loading')}...</div>;
   }
 
   return (
-    <div className="space-y-4 p-4 rounded-xl border dark:border-claude-darkBorder border-claude-border dark:bg-claude-darkSurface/30 bg-claude-surface/30">
+    <div className="space-y-4 p-4 rounded-xl border border-border-subtle bg-surface">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium dark:text-claude-darkText text-claude-text">
-          {i18nService.t("emailConfig")}
-        </h4>
+        <h4 className="text-sm font-medium text-foreground">{i18nService.t('emailConfig')}</h4>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary hover:text-claude-accent transition-colors"
+            className="text-xs text-secondary hover:text-primary transition-colors"
           >
-            {i18nService.t("collapse")}
+            {i18nService.t('collapse')}
           </button>
         )}
       </div>
       <div className="min-h-[18px]">
         {(persistError || (isPersisting && showPersisting)) && (
           <div
-            className={`text-xs ${persistError ? "text-red-600 dark:text-red-400" : "text-claude-textSecondary dark:text-claude-darkTextSecondary"}`}
+            className={`text-xs ${persistError ? 'text-red-600 dark:text-red-400' : 'text-secondary'}`}
           >
-            {persistError || `${i18nService.t("saving")}...`}
+            {persistError || `${i18nService.t('saving')}...`}
           </div>
         )}
       </div>
 
       {/* Provider Selection */}
       <div>
-        <label className={labelClassName}>
-          {i18nService.t("emailProvider")}
-        </label>
+        <label className={labelClassName}>{i18nService.t('emailProvider')}</label>
         <select
           value={provider}
-          onChange={(e) => handleProviderChange(e.target.value)}
+          onChange={e => handleProviderChange(e.target.value)}
           onBlur={queuePersist}
           className={inputClassName}
         >
-          <option value="">{i18nService.t("emailSelectProvider")}</option>
+          <option value="">{i18nService.t('emailSelectProvider')}</option>
           {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
             <option key={key} value={key}>
-              {key === "custom"
-                ? i18nService.t("emailCustomProvider")
-                : preset.label}
+              {key === 'custom' ? i18nService.t('emailCustomProvider') : preset.label}
             </option>
           ))}
         </select>
@@ -464,21 +423,19 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
 
       {/* Hint */}
       {hintKey && (
-        <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
+        <div className="text-xs text-secondary bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2">
           {i18nService.t(hintKey)}
         </div>
       )}
 
       {/* Email */}
       <div>
-        <label className={labelClassName}>
-          {i18nService.t("emailAddress")}
-        </label>
+        <label className={labelClassName}>{i18nService.t('emailAddress')}</label>
         <div className="relative">
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={e => setEmail(e.target.value)}
             onBlur={queuePersist}
             className={`${inputClassName} pr-8`}
             placeholder="your@email.com"
@@ -488,11 +445,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
               <button
                 type="button"
                 onClick={() => {
-                  setEmail("");
+                  setEmail('');
                   setTimeout(queuePersist, 0);
                 }}
-                className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                title={i18nService.t("clear") || "Clear"}
+                className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                title={i18nService.t('clear') || 'Clear'}
               >
                 <XCircleIconSolid className="h-4 w-4" />
               </button>
@@ -503,28 +460,26 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
 
       {/* Password */}
       <div>
-        <label className={labelClassName}>
-          {i18nService.t("emailPassword")}
-        </label>
+        <label className={labelClassName}>{i18nService.t('emailPassword')}</label>
         <div className="relative">
           <input
-            type={showPassword ? "text" : "password"}
+            type={showPassword ? 'text' : 'password'}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={e => setPassword(e.target.value)}
             onBlur={queuePersist}
             className={`${inputClassName} pr-16`}
-            placeholder={i18nService.t("emailPasswordPlaceholder")}
+            placeholder={i18nService.t('emailPasswordPlaceholder')}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {password && (
               <button
                 type="button"
                 onClick={() => {
-                  setPassword("");
+                  setPassword('');
                   setTimeout(queuePersist, 0);
                 }}
-                className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                title={i18nService.t("clear") || "Clear"}
+                className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                title={i18nService.t('clear') || 'Clear'}
               >
                 <XCircleIconSolid className="h-4 w-4" />
               </button>
@@ -532,11 +487,9 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
+              className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
               title={
-                showPassword
-                  ? i18nService.t("hide") || "Hide"
-                  : i18nService.t("show") || "Show"
+                showPassword ? i18nService.t('hide') || 'Hide' : i18nService.t('show') || 'Show'
               }
             >
               {showPassword ? (
@@ -553,19 +506,19 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary hover:text-claude-accent transition-colors"
+        className="flex items-center gap-1 text-xs text-secondary hover:text-primary transition-colors"
       >
         {showAdvanced ? (
           <ChevronUpIcon className="h-3.5 w-3.5" />
         ) : (
           <ChevronDownIcon className="h-3.5 w-3.5" />
         )}
-        {i18nService.t("emailAdvancedSettings")}
+        {i18nService.t('emailAdvancedSettings')}
       </button>
 
       {/* Advanced Settings */}
       {showAdvanced && (
-        <div className="space-y-3 pl-2 border-l-2 border-claude-border dark:border-claude-darkBorder">
+        <div className="space-y-3 pl-2 border-l-2 border-border">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClassName}>IMAP Host</label>
@@ -573,7 +526,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={imapHost}
-                  onChange={(e) => setImapHost(e.target.value)}
+                  onChange={e => setImapHost(e.target.value)}
                   onBlur={queuePersist}
                   className={`${inputClassName} pr-8`}
                   placeholder="imap.example.com"
@@ -583,11 +536,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        setImapHost("");
+                        setImapHost('');
                         setTimeout(queuePersist, 0);
                       }}
-                      className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                      title={i18nService.t("clear") || "Clear"}
+                      className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                      title={i18nService.t('clear') || 'Clear'}
                     >
                       <XCircleIconSolid className="h-4 w-4" />
                     </button>
@@ -601,7 +554,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={imapPort}
-                  onChange={(e) => setImapPort(e.target.value)}
+                  onChange={e => setImapPort(e.target.value)}
                   onBlur={queuePersist}
                   className={`${inputClassName} pr-8`}
                   placeholder="993"
@@ -611,11 +564,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        setImapPort("");
+                        setImapPort('');
                         setTimeout(queuePersist, 0);
                       }}
-                      className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                      title={i18nService.t("clear") || "Clear"}
+                      className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                      title={i18nService.t('clear') || 'Clear'}
                     >
                       <XCircleIconSolid className="h-4 w-4" />
                     </button>
@@ -632,7 +585,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={smtpHost}
-                  onChange={(e) => setSmtpHost(e.target.value)}
+                  onChange={e => setSmtpHost(e.target.value)}
                   onBlur={queuePersist}
                   className={`${inputClassName} pr-8`}
                   placeholder="smtp.example.com"
@@ -642,11 +595,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        setSmtpHost("");
+                        setSmtpHost('');
                         setTimeout(queuePersist, 0);
                       }}
-                      className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                      title={i18nService.t("clear") || "Clear"}
+                      className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                      title={i18nService.t('clear') || 'Clear'}
                     >
                       <XCircleIconSolid className="h-4 w-4" />
                     </button>
@@ -660,7 +613,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                 <input
                   type="text"
                   value={smtpPort}
-                  onChange={(e) => setSmtpPort(e.target.value)}
+                  onChange={e => setSmtpPort(e.target.value)}
                   onBlur={queuePersist}
                   className={`${inputClassName} pr-8`}
                   placeholder="587"
@@ -670,11 +623,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                     <button
                       type="button"
                       onClick={() => {
-                        setSmtpPort("");
+                        setSmtpPort('');
                         setTimeout(queuePersist, 0);
                       }}
-                      className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                      title={i18nService.t("clear") || "Clear"}
+                      className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                      title={i18nService.t('clear') || 'Clear'}
                     >
                       <XCircleIconSolid className="h-4 w-4" />
                     </button>
@@ -685,27 +638,23 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
           </div>
 
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-xs dark:text-claude-darkText text-claude-text">
+            <label className="flex items-center gap-2 text-xs text-foreground">
               <input
                 type="checkbox"
-                checked={imapTls === "true"}
-                onChange={(e) =>
-                  setImapTls(e.target.checked ? "true" : "false")
-                }
+                checked={imapTls === 'true'}
+                onChange={e => setImapTls(e.target.checked ? 'true' : 'false')}
                 onBlur={queuePersist}
-                className="h-3.5 w-3.5 text-claude-accent focus:ring-claude-accent rounded"
+                className="h-3.5 w-3.5 text-primary focus:ring-primary rounded"
               />
               IMAP TLS
             </label>
-            <label className="flex items-center gap-2 text-xs dark:text-claude-darkText text-claude-text">
+            <label className="flex items-center gap-2 text-xs text-foreground">
               <input
                 type="checkbox"
-                checked={smtpSecure === "true"}
-                onChange={(e) =>
-                  setSmtpSecure(e.target.checked ? "true" : "false")
-                }
+                checked={smtpSecure === 'true'}
+                onChange={e => setSmtpSecure(e.target.checked ? 'true' : 'false')}
                 onBlur={queuePersist}
-                className="h-3.5 w-3.5 text-claude-accent focus:ring-claude-accent rounded"
+                className="h-3.5 w-3.5 text-primary focus:ring-primary rounded"
               />
               SMTP SSL
             </label>
@@ -715,29 +664,27 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
             <label className="flex items-center gap-2 text-xs dark:text-claude-darkText text-claude-text">
               <input
                 type="checkbox"
-                checked={rejectUnauthorized === "false"}
-                onChange={(e) => {
-                  setRejectUnauthorized(e.target.checked ? "false" : "true");
+                checked={rejectUnauthorized === 'false'}
+                onChange={e => {
+                  setRejectUnauthorized(e.target.checked ? 'false' : 'true');
                   setTimeout(queuePersist, 0);
                 }}
                 className="h-3.5 w-3.5 text-claude-accent focus:ring-claude-accent rounded"
               />
-              {i18nService.t("emailAllowInsecureCert")}
+              {i18nService.t('emailAllowInsecureCert')}
             </label>
             <p className="text-[11px] text-claude-textSecondary dark:text-claude-darkTextSecondary mt-1 ml-6">
-              {i18nService.t("emailAllowInsecureCertHint")}
+              {i18nService.t('emailAllowInsecureCertHint')}
             </p>
           </div>
 
           <div>
-            <label className={labelClassName}>
-              {i18nService.t("emailMailbox")}
-            </label>
+            <label className={labelClassName}>{i18nService.t('emailMailbox')}</label>
             <div className="relative">
               <input
                 type="text"
                 value={mailbox}
-                onChange={(e) => setMailbox(e.target.value)}
+                onChange={e => setMailbox(e.target.value)}
                 onBlur={queuePersist}
                 className={`${inputClassName} pr-8`}
                 placeholder="INBOX"
@@ -747,11 +694,11 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      setMailbox("");
+                      setMailbox('');
                       setTimeout(queuePersist, 0);
                     }}
-                    className="p-0.5 rounded text-claude-textSecondary dark:text-claude-darkTextSecondary hover:text-claude-accent transition-colors"
-                    title={i18nService.t("clear") || "Clear"}
+                    className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
+                    title={i18nService.t('clear') || 'Clear'}
                   >
                     <XCircleIconSolid className="h-4 w-4" />
                   </button>
@@ -768,26 +715,22 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
           type="button"
           onClick={handleConnectivityTest}
           disabled={isTesting || !canTest}
-          className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
+          className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border border-border text-foreground hover:bg-surface-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
         >
           <SignalIcon className="h-3.5 w-3.5 mr-1.5" />
-          {isTesting
-            ? i18nService.t("imConnectivityTesting")
-            : i18nService.t("imConnectivityTest")}
+          {isTesting ? i18nService.t('imConnectivityTesting') : i18nService.t('imConnectivityTest')}
         </button>
 
         {connectivityError && (
           <div className="space-y-2">
-            <div className="text-xs text-red-600 dark:text-red-400">
-              {connectivityError}
-            </div>
+            <div className="text-xs text-red-600 dark:text-red-400">{connectivityError}</div>
             <button
               type="button"
               onClick={() => handleAskAI(null, connectivityError)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover hover:text-claude-accent dark:hover:text-claude-accent transition-colors active:scale-[0.98]"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-border-subtle text-secondary hover:bg-surface-hover hover:text-accent transition-colors active:scale-[0.98]"
             >
               <SparklesIcon className="h-3 w-3" />
-              {i18nService.t("emailConnectivityAskAI")}
+              {i18nService.t('emailConnectivityAskAI')}
             </button>
           </div>
         )}
@@ -795,7 +738,7 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
         {connectivityResult && (
           <div className="space-y-2">
             <div
-              className={`flex items-center gap-1 text-xs ${connectivityPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+              className={`flex items-center gap-1 text-xs ${connectivityPassed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
             >
               {connectivityPassed ? (
                 <CheckCircleIcon className="h-4 w-4" />
@@ -804,25 +747,24 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
               )}
               <span>
                 {connectivityPassed
-                  ? i18nService.t("connectionSuccess")
-                  : i18nService.t("connectionFailed")}
+                  ? i18nService.t('connectionSuccess')
+                  : i18nService.t('connectionFailed')}
               </span>
-              <span className="text-[11px] text-claude-textSecondary dark:text-claude-darkTextSecondary">
+              <span className="text-[11px] text-secondary">
                 {new Date(connectivityResult.testedAt).toLocaleString()}
               </span>
             </div>
             <div className="space-y-1.5">
-              {connectivityResult.checks.map((check) => {
-                const checkPassed = check.level === "pass";
-                const checkLabel =
-                  check.code === "imap_connection" ? "IMAP" : "SMTP";
+              {connectivityResult.checks.map(check => {
+                const checkPassed = check.level === 'pass';
+                const checkLabel = check.code === 'imap_connection' ? 'IMAP' : 'SMTP';
                 return (
                   <div
                     key={check.code}
-                    className="rounded-lg border dark:border-claude-darkBorder/60 border-claude-border/60 px-2.5 py-2 dark:bg-claude-darkSurface/25 bg-white/70"
+                    className="rounded-lg border border-border-subtle px-2.5 py-2 bg-surface"
                   >
                     <div
-                      className={`flex items-center gap-1 text-xs font-medium ${checkPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                      className={`flex items-center gap-1 text-xs font-medium ${checkPassed ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
                     >
                       {checkPassed ? (
                         <CheckCircleIcon className="h-3.5 w-3.5" />
@@ -831,12 +773,8 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
                       )}
                       <span>{checkLabel}</span>
                     </div>
-                    <div className="mt-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {check.message}
-                    </div>
-                    <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {`${check.durationMs}ms`}
-                    </div>
+                    <div className="mt-1 text-xs text-secondary">{check.message}</div>
+                    <div className="mt-1 text-[11px] text-secondary">{`${check.durationMs}ms`}</div>
                   </div>
                 );
               })}
@@ -845,10 +783,10 @@ const EmailSkillConfig: React.FC<EmailSkillConfigProps> = ({ onClose }) => {
               <button
                 type="button"
                 onClick={() => handleAskAI(connectivityResult, null)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkTextSecondary text-claude-textSecondary dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover hover:text-claude-accent dark:hover:text-claude-accent transition-colors active:scale-[0.98]"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-border-subtle text-secondary hover:bg-surface-hover hover:text-accent transition-colors active:scale-[0.98]"
               >
                 <SparklesIcon className="h-3 w-3" />
-                {i18nService.t("emailConnectivityAskAI")}
+                {i18nService.t('emailConnectivityAskAI')}
               </button>
             )}
           </div>
