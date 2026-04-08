@@ -7,6 +7,8 @@ import { OpenClawApi as OpenClawApiConst, OpenClawProviderId, ProviderName } fro
 import type { Agent, CoworkConfig, CoworkExecutionMode } from '../coworkStore';
 import type { DiscordOpenClawConfig, IMSettings, TelegramOpenClawConfig } from '../im/types';
 import type { DingTalkInstanceConfig, FeishuInstanceConfig, NeteaseBeeChanConfig, NimConfig, PopoOpenClawConfig, QQInstanceConfig, WecomOpenClawConfig, WeixinOpenClawConfig } from '../im/types';
+import { OpenClawSessionKeepAlive } from '../openclawSessionPolicy/constants';
+import { buildOpenClawSessionConfig } from '../openclawSessionPolicy/store';
 import { getAllServerModelMetadata, resolveAllEnabledProviderConfigs, resolveAllProviderApiKeys, resolveRawApiConfig } from './claudeSettings';
 import { getCoworkOpenAICompatProxyBaseURL, getCoworkOpenAICompatProxyToken } from './coworkOpenAICompatProxy';
 import type { McpToolManifestEntry } from './mcpServerManager';
@@ -21,8 +23,6 @@ import { parseChannelSessionKey } from './openclawChannelSessionSync';
 import type { OpenClawEngineManager } from './openclawEngineManager';
 import { findThirdPartyExtensionsDir, hasBundledOpenClawExtension } from './openclawLocalExtensions';
 import { getOpenClawTokenProxyPort } from './openclawTokenProxy';
-import { buildOpenClawSessionConfig } from '../openclawSessionPolicy/store';
-import { OpenClawSessionKeepAlive } from '../openclawSessionPolicy/constants';
 
 export type McpBridgeConfig = {
   callbackUrl: string;

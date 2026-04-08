@@ -1,57 +1,58 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import Modal from './common/Modal';
-import { configService } from '../services/config';
-import { apiService } from '../services/api';
-import { checkForAppUpdate } from '../services/appUpdate';
-import type { AppUpdateInfo } from '../services/appUpdate';
-import { themeService } from '../services/theme';
-import { i18nService, LanguageType } from '../services/i18n';
-import { decryptSecret, encryptWithPassword, decryptWithPassword, EncryptedPayload, PasswordEncryptedPayload } from '../services/encryption';
-import { coworkService } from '../services/cowork';
-import { APP_ID, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
-import ErrorMessage from './ErrorMessage';
-import { XMarkIcon, Cog6ToothIcon, SignalIcon, CheckCircleIcon, XCircleIcon, CubeIcon, ChatBubbleLeftIcon, EnvelopeIcon, CpuChipIcon, InformationCircleIcon, UserCircleIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import PlusCircleIcon from './icons/PlusCircleIcon';
-import TrashIcon from './icons/TrashIcon';
-import PencilIcon from './icons/PencilIcon';
-import BrainIcon from './icons/BrainIcon';
+import { ArrowTopRightOnSquareIcon,ChatBubbleLeftIcon, CheckCircleIcon, Cog6ToothIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, InformationCircleIcon, SignalIcon, UserCircleIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import React, { useCallback,useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setAvailableModels } from '../store/slices/modelSlice';
+
+import { ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
+import { type AppConfig, defaultConfig, getCustomProviderDefaultName,getProviderDisplayName,getVisibleProviders, isCustomProvider } from '../config';
+import { APP_ID, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
+import { apiService } from '../services/api';
+import type { AppUpdateInfo } from '../services/appUpdate';
+import { checkForAppUpdate } from '../services/appUpdate';
+import { configService } from '../services/config';
+import { coworkService } from '../services/cowork';
+import { decryptSecret, decryptWithPassword, EncryptedPayload, encryptWithPassword, PasswordEncryptedPayload } from '../services/encryption';
+import { i18nService, LanguageType } from '../services/i18n';
+import { imService } from '../services/im';
+import { themeService } from '../services/theme';
 import { selectCoworkConfig } from '../store/selectors/coworkSelectors';
-import ThemedSelect from './ui/ThemedSelect';
+import { setAvailableModels } from '../store/slices/modelSlice';
 import type {
   CoworkAgentEngine,
+  CoworkMemoryStats,
+  CoworkUserMemoryEntry,
   OpenClawEngineStatus,
   OpenClawSessionKeepAlive,
-  CoworkUserMemoryEntry,
-  CoworkMemoryStats,
 } from '../types/cowork';
 import { OpenClawSessionKeepAlive as OpenClawSessionKeepAliveValues } from '../types/cowork';
-import IMSettings from './im/IMSettings';
-import { imService } from '../services/im';
-import EmailSkillConfig from './skills/EmailSkillConfig';
-import { ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
-import { defaultConfig, type AppConfig, getVisibleProviders, isCustomProvider, getCustomProviderDefaultName,getProviderDisplayName } from '../config';
+import Modal from './common/Modal';
+import ErrorMessage from './ErrorMessage';
+import BrainIcon from './icons/BrainIcon';
+import PencilIcon from './icons/PencilIcon';
+import PlusCircleIcon from './icons/PlusCircleIcon';
 import {
-  OpenAIIcon,
+  AnthropicIcon,
+  CustomProviderIcon,
   DeepSeekIcon,
   GeminiIcon,
-  AnthropicIcon,
-  MoonshotIcon,
-  ZhipuIcon,
+  GitHubCopilotIcon,
   MiniMaxIcon,
-  YouDaoZhiYunIcon,
+  MoonshotIcon,
+  OllamaIcon,
+  OpenAIIcon,
+  OpenRouterIcon,
+  QianfanIcon,
   QwenIcon,
-  XiaomiIcon,
   StepfunIcon,
   VolcengineIcon,
-  QianfanIcon,
-  OpenRouterIcon,
-  OllamaIcon,
-  GitHubCopilotIcon,
-  CustomProviderIcon,
+  XiaomiIcon,
+  YouDaoZhiYunIcon,
+  ZhipuIcon,
 } from './icons/providers';
+import TrashIcon from './icons/TrashIcon';
+import IMSettings from './im/IMSettings';
+import EmailSkillConfig from './skills/EmailSkillConfig';
+import ThemedSelect from './ui/ThemedSelect';
 
 type TabType = 'general'| 'coworkAgentEngine' | 'model' | 'coworkMemory' | 'coworkAgent' | 'shortcuts' | 'im' | 'email' | 'about';
 
@@ -587,13 +588,13 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
   const [isUpdatingPreventSleep, setIsUpdatingPreventSleep] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const buildNoticeMessage = (): string | null => {
+  const buildNoticeMessage = useCallback((): string | null => {
     if (noticeI18nKey) {
       const base = i18nService.t(noticeI18nKey);
       return noticeExtra ? `${base} (${noticeExtra})` : base;
     }
     return notice ?? null;
-  };
+  }, [notice, noticeExtra, noticeI18nKey]);
 
   const [noticeMessage, setNoticeMessage] = useState<string | null>(() => buildNoticeMessage());
   const [testResult, setTestResult] = useState<ProviderConnectionTestResult | null>(null);
@@ -1042,18 +1043,21 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
           ...config.shortcuts,
         }));
       }
-    } catch (error) {
+    } catch {
       setError('Failed to load settings');
     }
   }, []);
 
   useEffect(() => {
+    const initialThemeId = initialThemeIdRef.current;
+    const initialTheme = initialThemeRef.current;
+    const initialLanguage = initialLanguageRef.current;
     return () => {
       if (didSaveRef.current) {
         return;
       }
-      themeService.restoreTheme(initialThemeIdRef.current, initialThemeRef.current);
-      i18nService.setLanguage(initialLanguageRef.current, { persist: false });
+      themeService.restoreTheme(initialThemeId, initialTheme);
+      i18nService.setLanguage(initialLanguage, { persist: false });
     };
   }, []);
 
@@ -1066,7 +1070,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
 
   useEffect(() => {
     setNoticeMessage(buildNoticeMessage());
-  }, [notice, noticeI18nKey, noticeExtra]);
+  }, [buildNoticeMessage]);
 
   useEffect(() => {
     if (initialTab) {
@@ -1640,8 +1644,8 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
         setCopilotError(result.error || 'Authentication failed');
         setCopilotAuthStatus('error');
       }
-    } catch (error: any) {
-      setCopilotError(error.message || 'Authentication failed');
+    } catch (error: unknown) {
+      setCopilotError(error instanceof Error ? error.message : 'Authentication failed');
       setCopilotAuthStatus('error');
     }
   };
@@ -1733,7 +1737,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
 
       // For Qwen provider, check if OAuth should be used
       if (firstEnabledProvider && firstEnabledProvider[0] === 'qwen') {
-        const qwenConfig = firstEnabledProvider[1] as any;
+        const qwenConfig = firstEnabledProvider[1] as ProvidersConfig['qwen'];
         if (!qwenConfig.apiKey && qwenConfig.oauthCredentials) {
           // Use OAuth token as API key placeholder
           apiKeyToUse = 'qwen-oauth';
@@ -1993,7 +1997,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
 
     // Check if provider has valid authentication (API Key or OAuth for Qwen)
     const hasValidAuth = providerConfig.apiKey || 
-      (testingProvider === 'qwen' && (providerConfig as any).oauthCredentials);
+      (testingProvider === 'qwen' && (providerConfig as ProvidersConfig['qwen']).oauthCredentials);
     
     if (providerRequiresApiKey(testingProvider) && !hasValidAuth) {
       showTestResultModal({ success: false, message: i18nService.t('apiKeyRequired') }, testingProvider);
@@ -2216,7 +2220,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
       let payload: ProvidersImportPayload;
       try {
         payload = JSON.parse(raw) as ProvidersImportPayload;
-      } catch (parseError) {
+      } catch {
         setError(i18nService.t('invalidProvidersFile'));
         return;
       }
@@ -2410,7 +2414,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
   };
 
   // 渲染标签页
-  const sidebarTabs: { key: TabType; label: string; icon: React.ReactNode }[] = useMemo(() => {
+  const sidebarTabs: { key: TabType; label: string; icon: React.ReactNode }[] = (() => {
     const allTabs = [
       { key: 'general' as TabType,        label: i18nService.t('general'),        icon: <Cog6ToothIcon className="h-5 w-5" /> },
       { key: 'coworkAgentEngine' as TabType, label: i18nService.t('coworkAgentEngine'), icon: <CpuChipIcon className="h-5 w-5" /> },
@@ -2430,7 +2434,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
       return allTabs.filter(tab => ui[`settings.${tab.key}`] !== 'hide');
     }
     return allTabs;
-  }, [language, enterpriseConfig]);
+  })();
 
   const activeTabLabel = useMemo(() => {
     return sidebarTabs.find(t => t.key === activeTab)?.label ?? '';
@@ -3830,7 +3834,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
                 <button
                   type="button"
                   onClick={handleTestConnection}
-                  disabled={isTesting || (providerRequiresApiKey(activeProvider) && !providers[activeProvider].apiKey && !(activeProvider === 'qwen' && (providers.qwen as any).oauthCredentials))}
+                  disabled={isTesting || (providerRequiresApiKey(activeProvider) && !providers[activeProvider].apiKey && !(activeProvider === 'qwen' && providers.qwen.oauthCredentials))}
                   className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
                 >
                   <SignalIcon className="h-3.5 w-3.5 mr-1.5" />

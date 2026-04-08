@@ -1,37 +1,37 @@
+import { classifyErrorKey } from '../../common/coworkErrorClassify';
 import { store } from '../store';
 import {
-  setSessions,
-  setCurrentSession,
+  addMessage,
   addSession,
-  updateSessionStatus,
+  clearCurrentSession,
+  clearPendingPermissions,
   deleteSession as deleteSessionAction,
   deleteSessions as deleteSessionsAction,
-  addMessage,
-  updateMessageContent,
-  setStreaming,
-  setRemoteManaged,
-  updateSessionPinned,
-  updateSessionTitle,
-  enqueuePendingPermission,
   dequeuePendingPermission,
-  clearPendingPermissions,
+  enqueuePendingPermission,
   setConfig,
-  clearCurrentSession,
+  setCurrentSession,
+  setRemoteManaged,
+  setSessions,
+  setStreaming,
+  updateMessageContent,
+  updateSessionPinned,
+  updateSessionStatus,
+  updateSessionTitle,
 } from '../store/slices/coworkSlice';
 import type {
-  CoworkSession,
-  CoworkConfigUpdate,
   CoworkApiConfig,
-  CoworkUserMemoryEntry,
+  CoworkConfigUpdate,
+  CoworkContinueOptions,
   CoworkMemoryStats,
   CoworkPermissionResult,
-  OpenClawEngineStatus,
+  CoworkSession,
   CoworkStartOptions,
-  CoworkContinueOptions,
+  CoworkUserMemoryEntry,
+  OpenClawEngineStatus,
   OpenClawSessionPolicyConfig,
 } from '../types/cowork';
 import { i18nService } from './i18n';
-import { classifyErrorKey } from '../../common/coworkErrorClassify';
 
 const classifyError = (error: string): string => {
   const key = classifyErrorKey(error);

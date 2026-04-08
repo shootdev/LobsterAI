@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+
 import {
   DEFAULT_OPENCLAW_SESSION_POLICY_CONFIG,
   OPENCLAW_SESSION_MAINTENANCE,
@@ -7,9 +8,9 @@ import {
 } from './constants';
 import {
   buildOpenClawSessionConfig,
-  normalizeOpenClawSessionPolicyConfig,
   loadOpenClawSessionPolicyConfig,
   mapKeepAliveToSessionReset,
+  normalizeOpenClawSessionPolicyConfig,
   saveOpenClawSessionPolicyConfig,
 } from './store';
 

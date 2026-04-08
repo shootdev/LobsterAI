@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { contextBridge, ipcRenderer } from 'electron';
+
 import { IpcChannel as ScheduledTaskIpc } from '../scheduledTask/constants';
-import { OpenClawSessionPolicyIpc } from './openclawSessionPolicy/constants';
 import type { Platform } from '../shared/platform';
+import { OpenClawSessionPolicyIpc } from './openclawSessionPolicy/constants';
 
 // 暴露安全的 API 到渲染进程
 contextBridge.exposeInMainWorld('electron', {
