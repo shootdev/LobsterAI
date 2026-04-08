@@ -1122,7 +1122,11 @@ export class OpenClawConfigSync {
           ? inst.groups
           : { '*': { requireMention: true } },
         historyLimit: inst.historyLimit || 50,
+        streaming: inst.streaming ?? true,
         replyMode: inst.replyMode || 'auto',
+        blockStreaming: inst.blockStreaming ?? false,
+        ...(inst.footer ? { footer: inst.footer } : {}),
+        ...(inst.blockStreamingCoalesce ? { blockStreamingCoalesce: inst.blockStreamingCoalesce } : {}),
         mediaMaxMb: inst.mediaMaxMb || 30,
       });
 
