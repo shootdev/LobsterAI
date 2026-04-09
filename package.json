@@ -7,6 +7,7 @@
   },
   "license": "MIT",
   "version": "2026.3.22",
+  "description": "Q助理电脑机器人",
   "openclaw": {
     "version": "v2026.3.2",
     "repo": "https://github.com/openclaw/openclaw.git",
