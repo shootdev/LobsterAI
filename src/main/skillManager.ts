@@ -9,6 +9,7 @@ import { SqliteStore } from './sqliteStore';
 import { cpRecursiveSync } from './fsCompat';
 import { getElectronNodeRuntimePath } from './libs/coworkUtil';
 import { appendPythonRuntimeToEnv } from './libs/pythonRuntime';
+import { resolveSkillsRoot } from './libs/skillsPaths';
 import { scanSkillSecurity, scanMultipleSkillDirs, mergeReports } from './libs/skillSecurity/skillSecurityScanner';
 import type { SkillSecurityReport, SecurityReportAction } from './libs/skillSecurity/skillSecurityTypes';
 import { t } from './i18n';
@@ -1092,7 +1093,15 @@ export class SkillManager {
   constructor(private getStore: () => SqliteStore) {}
 
   getSkillsRoot(): string {
-    return path.resolve(app.getPath('userData'), SKILLS_DIR_NAME);
+    return resolveSkillsRoot({
+      isPackaged: app.isPackaged,
+      userDataPath: app.getPath('userData'),
+      appDataPath: app.getPath('appData'),
+      appPath: app.getAppPath(),
+      cwd: process.cwd(),
+      moduleDir: __dirname,
+      envRoots: [process.env.LOBSTERAI_SKILLS_ROOT, process.env.SKILLS_ROOT],
+    }, fs.existsSync);
   }
 
   ensureSkillsRoot(): string {

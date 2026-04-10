@@ -9,6 +9,7 @@ import type { OpenClawEngineManager } from './openclawEngineManager';
 import { parseChannelSessionKey } from './openclawChannelSessionSync';
 import type { McpToolManifestEntry } from './mcpServerManager';
 import { hasBundledOpenClawExtension } from './openclawLocalExtensions';
+import { listExistingSkillsRoots } from './skillsPaths';
 import { buildScheduledTaskEnginePrompt } from './scheduledTaskEnginePrompt';
 
 export type McpBridgeConfig = {
@@ -1136,18 +1137,24 @@ export class OpenClawConfigSync {
    *   Linux:   ~/.config/LobsterAI/SKILLs
    */
   private resolveSkillsExtraDirs(): string[] {
-    const userDataSkillsDir = path.join(app.getPath('userData'), 'SKILLs');
-    try {
-      if (fs.statSync(userDataSkillsDir).isDirectory()) {
-        return [userDataSkillsDir];
+    return listExistingSkillsRoots({
+      isPackaged: app.isPackaged,
+      userDataPath: app.getPath('userData'),
+      appDataPath: app.getPath('appData'),
+      appPath: app.getAppPath(),
+      cwd: process.cwd(),
+      moduleDir: __dirname,
+      envRoots: [process.env.LOBSTERAI_SKILLS_ROOT, process.env.SKILLS_ROOT],
+    }, (candidate) => {
+      try {
+        return fs.statSync(candidate).isDirectory();
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          console.warn('[OpenClawConfigSync] Failed to stat skills directory:', err);
+        }
+        return false;
       }
-    } catch (err: unknown) {
-      // ENOENT is expected on fresh installs before any skills sync.
-      if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn('[OpenClawConfigSync] Failed to stat SKILLs directory:', err);
-      }
-    }
-    return [];
+    });
   }
 
   /**
