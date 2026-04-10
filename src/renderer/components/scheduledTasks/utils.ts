@@ -1,4 +1,4 @@
-import cronstrue from 'cronstrue/i18n';
+import cronstrue from 'cronstrue';
 
 import type {
   Schedule,
