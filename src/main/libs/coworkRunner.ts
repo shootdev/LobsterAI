@@ -11,8 +11,10 @@ import { loadClaudeSdk } from './claudeSdk';
 import { getElectronNodeRuntimePath, getEnhancedEnv, getEnhancedEnvWithTmpdir, getSkillsRoot } from './coworkUtil';
 import { coworkLog, getCoworkLogPath } from './coworkLogger';
 import { ensurePythonPipReady, ensurePythonRuntimeReady } from './pythonRuntime';
+import { isDeleteCommand, isDangerousCommand } from './commandSafety';
 import { isQuestionLikeMemoryText, type CoworkMemoryGuardLevel } from './coworkMemoryExtractor';
-import { SCHEDULED_TASK_SWITCH_MESSAGE } from './scheduledTaskEnginePrompt';
+import { setCoworkProxySessionId } from './coworkOpenAICompatProxy';
+import { SCHEDULED_TASK_SWITCH_MESSAGE } from '../../scheduledTask/enginePrompt';
 import { z } from 'zod';
 
 const ATTACHMENT_LINE_RE = /^\s*(?:[-*]\s*)?(输入文件|input\s*file)\s*[:：]\s*(.+?)\s*$/i;
@@ -55,9 +57,6 @@ const PERMISSION_RESPONSE_TIMEOUT_MS = 60_000;
 const DELETE_TOOL_NAMES = new Set(['delete', 'remove', 'unlink', 'rmdir']);
 const SAFETY_APPROVAL_ALLOW_OPTION = '允许本次操作';
 const SAFETY_APPROVAL_DENY_OPTION = '拒绝本次操作';
-const DELETE_COMMAND_RE = /\b(rm|rmdir|unlink|del|erase|remove-item)\b/i;
-const FIND_DELETE_COMMAND_RE = /\bfind\b[\s\S]*\s-delete\b/i;
-const GIT_CLEAN_COMMAND_RE = /\bgit\s+clean\b/i;
 const PYTHON_BASH_COMMAND_RE = /(?:^|[^\w.-])(?:python(?:3)?|py(?:\.exe)?|pip(?:3)?)(?:\s+-3)?(?:\s|$)|\.py(?:\s|$)/i;
 const PYTHON_PIP_BASH_COMMAND_RE = /(?:^|[^\w.-])(?:pip(?:3)?|python(?:3)?\s+-m\s+pip|py(?:\.exe)?\s+-m\s+pip)(?:\s|$)/i;
 const MEMORY_REQUEST_TAIL_SPLIT_RE = /[,，。]\s*(?:请|麻烦)?你(?:帮我|帮忙|给我|为我|看下|看一下|查下|查一下)|[,，。]\s*帮我|[,，。]\s*请帮我|[,，。]\s*(?:能|可以)不能?\s*帮我|[,，。]\s*你看|[,，。]\s*请你/i;
@@ -1243,9 +1242,7 @@ export class CoworkRunner extends EventEmitter {
     if (!command.trim()) {
       return false;
     }
-    return DELETE_COMMAND_RE.test(command)
-      || FIND_DELETE_COMMAND_RE.test(command)
-      || GIT_CLEAN_COMMAND_RE.test(command);
+    return isDeleteCommand(command);
   }
 
   private truncateCommandPreview(command: string, maxLength = 120): string {
@@ -1342,18 +1339,40 @@ export class CoworkRunner extends EventEmitter {
     toolName: string,
     toolInput: Record<string, unknown>
   ): Promise<PermissionResult | null> {
+    // 1. Non-Bash delete tools (e.g. dedicated 'rm' tool) → delete confirmation
     if (this.isDeleteOperation(toolName, toolInput)) {
-      const deleteQuestion = `即将执行删除操作，是否允许？`;
       const approved = await this.requestSafetyApproval(
         sessionId,
         signal,
         activeSession,
-        deleteQuestion,
+        '即将执行删除操作，是否允许？',
         toolName,
         toolInput
       );
       if (!approved) {
         return { behavior: 'deny', message: 'Delete operation denied by user.' };
+      }
+      return null;
+    }
+
+    // 2. Bash commands → only confirm if dangerous
+    if (toolName === 'Bash') {
+      const command = this.extractToolCommand(toolInput);
+      if (command && isDangerousCommand(command)) {
+        const question = isDeleteCommand(command)
+          ? '即将执行删除操作，是否允许？'
+          : '即将执行危险命令，是否允许？';
+        const approved = await this.requestSafetyApproval(
+          sessionId,
+          signal,
+          activeSession,
+          question,
+          toolName,
+          toolInput
+        );
+        if (!approved) {
+          return { behavior: 'deny', message: 'Dangerous command denied by user.' };
+        }
       }
     }
 
@@ -1500,6 +1519,7 @@ export class CoworkRunner extends EventEmitter {
         effectivePrompt = this.injectLocalHistoryPrompt(sessionId, prompt, effectivePrompt);
       }
 
+      setCoworkProxySessionId(sessionId);
       await this.runClaudeCode(activeSession, effectivePrompt, sessionCwd, effectiveSystemPrompt, options.imageAttachments);
     } catch (error) {
       console.error('Cowork session error:', error);
@@ -1585,6 +1605,7 @@ export class CoworkRunner extends EventEmitter {
     try {
       const promptPrefix = this.buildPromptPrefix();
       const effectivePrompt = promptPrefix ? `${promptPrefix}\n\n---\n\n${prompt}` : prompt;
+      setCoworkProxySessionId(sessionId);
       await this.runClaudeCode(activeSession, effectivePrompt, sessionCwd, effectiveSystemPrompt, options.imageAttachments);
     } catch (error) {
       console.error('Cowork continue error:', error);
@@ -1601,6 +1622,8 @@ export class CoworkRunner extends EventEmitter {
     }
     this.clearPendingPermissions(sessionId);
     this.store.updateSession(sessionId, { status: 'idle' });
+    this.emit('sessionStopped', sessionId);
+    setCoworkProxySessionId(null);
   }
 
   onSessionDeleted(sessionId: string): void {
@@ -2482,17 +2505,34 @@ export class CoworkRunner extends EventEmitter {
   }
 
   private normalizeSdkError(value: unknown): string | null {
-    if (typeof value !== 'string') {
-      return null;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.toLowerCase() === 'unknown') {
+        return null;
+      }
+      return trimmed;
     }
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
+    // Handle object-type errors (e.g. OpenAI-compatible API error format:
+    // { message: "...", type: "...", code: "..." })
+    if (value && typeof value === 'object') {
+      const errObj = value as Record<string, unknown>;
+      const message = errObj.message ?? errObj.msg;
+      if (typeof message === 'string' && message.trim()) {
+        const parts: string[] = [message.trim()];
+        if (typeof errObj.type === 'string' && errObj.type.trim()) {
+          parts.push(`(type: ${errObj.type.trim()})`);
+        }
+        if (errObj.code != null && String(errObj.code).trim()) {
+          parts.push(`(code: ${String(errObj.code).trim()})`);
+        }
+        return parts.join(' ');
+      }
+      // Try nested error.message (some APIs wrap: { error: { message: "..." } })
+      if (errObj.error && typeof errObj.error === 'object') {
+        return this.normalizeSdkError(errObj.error);
+      }
     }
-    if (trimmed.toLowerCase() === 'unknown') {
-      return null;
-    }
-    return trimmed;
+    return null;
   }
 
   private handleClaudeEvent(sessionId: string, event: unknown): void {
@@ -2565,17 +2605,19 @@ export class CoworkRunner extends EventEmitter {
       if (subtype !== 'success') {
         const errors = Array.isArray(payload.errors)
           ? payload.errors
-            .filter((error) => typeof error === 'string')
-            .map((error) => (error as string).trim())
-            .filter((error) => error && error.toLowerCase() !== 'unknown')
+            .map((error) => typeof error === 'string' ? error.trim() : this.normalizeSdkError(error))
+            .filter((error): error is string => !!error && error.toLowerCase() !== 'unknown')
           : [];
         const payloadError = this.normalizeSdkError(payload.error);
+        const resultError = this.normalizeSdkError(payload.result);
         const errorMessage =
           errors.length > 0
             ? errors.join('\n')
             : payloadError
               ? payloadError
-              : 'Claude run failed';
+              : resultError
+                ? resultError
+                : `Agent run failed (subtype: ${subtype})`;
         this.handleError(sessionId, errorMessage);
         return;
       }

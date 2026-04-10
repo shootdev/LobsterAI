@@ -1,23 +1,33 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState } from '../../store';
-import { addMessage, clearCurrentSession, setCurrentSession, setStreaming, updateSessionStatus } from '../../store/slices/coworkSlice';
-import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
-import { setActions, selectAction, clearSelection } from '../../store/slices/quickActionSlice';
+import { ShieldCheckIcon } from '@heroicons/react/24/outline';
+import React, { useEffect, useRef,useState } from 'react';
+import { useDispatch,useSelector } from 'react-redux';
+
+import { agentService } from '../../services/agent';
 import { coworkService } from '../../services/cowork';
-import { skillService } from '../../services/skill';
-import { quickActionService } from '../../services/quickAction';
 import { i18nService } from '../../services/i18n';
+import { quickActionService } from '../../services/quickAction';
+import { skillService } from '../../services/skill';
+import { RootState } from '../../store';
+import {
+  selectCoworkConfig,
+  selectCurrentSession,
+  selectIsOpenClawEngine,
+  selectIsStreaming,
+} from '../../store/selectors/coworkSelectors';
+import { addMessage, clearCurrentSession, setCurrentSession, setStreaming, updateSessionStatus } from '../../store/slices/coworkSlice';
+import { clearSelection,selectAction, setActions } from '../../store/slices/quickActionSlice';
+import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
+import type { CoworkImageAttachment, CoworkSession, OpenClawEngineStatus } from '../../types/cowork';
+import { toOpenClawModelRef } from '../../utils/openclawModelRef';
+import ComposeIcon from '../icons/ComposeIcon';
+import SidebarToggleIcon from '../icons/SidebarToggleIcon';
+import ModelSelector from '../ModelSelector';
+import { PromptPanel,QuickActionBar } from '../quick-actions';
+import type { SettingsOpenOptions } from '../Settings';
+import WindowTitleBar from '../window/WindowTitleBar';
+import { resolveAgentModelSelection } from './agentModelSelection';
 import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInput';
 import CoworkSessionDetail from './CoworkSessionDetail';
-import ModelSelector from '../ModelSelector';
-import SidebarToggleIcon from '../icons/SidebarToggleIcon';
-import ComposeIcon from '../icons/ComposeIcon';
-import { ShieldCheckIcon } from '@heroicons/react/24/outline';
-import WindowTitleBar from '../window/WindowTitleBar';
-import { QuickActionBar, PromptPanel } from '../quick-actions';
-import type { SettingsOpenOptions } from '../Settings';
-import type { CoworkSession, CoworkImageAttachment, OpenClawEngineStatus } from '../../types/cowork';
 
 export interface CoworkViewProps {
   onRequestAppSettings?: (options?: SettingsOpenOptions) => void;
@@ -34,39 +44,55 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const [isInitialized, setIsInitialized] = useState(false);
   const [openClawStatus, setOpenClawStatus] = useState<OpenClawEngineStatus | null>(null);
   const [isRestartingGateway, setIsRestartingGateway] = useState(false);
-  // Track if we're starting a session to prevent duplicate submissions
+  // Track if we're starting/continuing a session to prevent duplicate submissions
   const isStartingRef = useRef(false);
+  const isContinuingRef = useRef(false);
   // Track pending start request so stop can cancel delayed startup.
-  const pendingStartRef = useRef<{ requestId: number; cancelled: boolean } | null>(null);
+  const pendingStartRef = useRef<{
+    requestId: number;
+    cancelled: boolean;
+    cancellationAction: 'stop' | 'delete' | null;
+  } | null>(null);
   const startRequestIdRef = useRef(0);
   // Ref for CoworkPromptInput
   const promptInputRef = useRef<CoworkPromptInputRef>(null);
 
-  const {
-    currentSession,
-    isStreaming,
-    config,
-  } = useSelector((state: RootState) => state.cowork);
-  const isOpenClawEngine = config.agentEngine !== 'yd_cowork';
+  const currentSession = useSelector(selectCurrentSession);
+  const isStreaming = useSelector(selectIsStreaming);
+  const config = useSelector(selectCoworkConfig);
+  const isOpenClawEngine = useSelector(selectIsOpenClawEngine);
 
   const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
   const skills = useSelector((state: RootState) => state.skill.skills);
   const quickActions = useSelector((state: RootState) => state.quickAction.actions);
   const selectedActionId = useSelector((state: RootState) => state.quickAction.selectedActionId);
+  const currentAgentId = useSelector((state: RootState) => state.agent.currentAgentId);
+  const agents = useSelector((state: RootState) => state.agent.agents);
+  const availableModels = useSelector((state: RootState) => state.model.availableModels);
+  const globalSelectedModel = useSelector((state: RootState) => state.model.selectedModel);
+  const currentAgent = agents.find((agent) => agent.id === currentAgentId);
+  const {
+    selectedModel: headerSelectedModel,
+  } = resolveAgentModelSelection({
+    agentModel: currentAgent?.model ?? '',
+    availableModels,
+    fallbackModel: globalSelectedModel,
+    engine: config.agentEngine,
+  });
 
-  const buildApiConfigNotice = (error?: string) => {
-    const baseNotice = i18nService.t('coworkModelSettingsRequired');
+  const buildApiConfigNotice = (error?: string): { noticeI18nKey: string; noticeExtra?: string } => {
+    const key = 'coworkModelSettingsRequired';
     if (!error) {
-      return baseNotice;
+      return { noticeI18nKey: key };
     }
     const normalizedError = error.trim();
     if (
       normalizedError.startsWith('No enabled provider found for model:')
       || normalizedError === 'No available model configured in enabled providers.'
     ) {
-      return baseNotice;
+      return { noticeI18nKey: key };
     }
-    return `${baseNotice} (${error})`;
+    return { noticeI18nKey: key, noticeExtra: error };
   };
 
   const resolveEngineStatusText = (status: OpenClawEngineStatus): string => {
@@ -120,12 +146,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         console.error('Failed to load quick actions:', error);
       }
       try {
-        const apiConfig = await coworkService.checkApiConfig();
+          const apiConfig = await coworkService.checkApiConfig();
         if (apiConfig && !apiConfig.hasConfig) {
           onRequestAppSettings?.({
             initialTab: 'im',
-            //notice: buildApiConfigNotice(apiConfig.error),
-            notice: "",
+            ...buildApiConfigNotice(apiConfig.error),
           });
         }
       } catch (error) {
@@ -153,6 +178,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       unsubscribe();
       unsubscribeOpenClawStatus();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
   const handleStartSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]): Promise<boolean | void> => {
@@ -164,10 +190,17 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     if (isStartingRef.current) return;
     isStartingRef.current = true;
     const requestId = ++startRequestIdRef.current;
-    pendingStartRef.current = { requestId, cancelled: false };
+    pendingStartRef.current = { requestId, cancelled: false, cancellationAction: null };
     const isPendingStartCancelled = () => {
       const pending = pendingStartRef.current;
       return !pending || pending.requestId !== requestId || pending.cancelled;
+    };
+    const getPendingCancellationAction = () => {
+      const pending = pendingStartRef.current;
+      if (!pending || pending.requestId !== requestId || !pending.cancelled) {
+        return null;
+      }
+      return pending.cancellationAction;
     };
 
     try {
@@ -176,7 +209,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         if (apiConfig && !apiConfig.hasConfig) {
           onRequestAppSettings?.({
             initialTab: 'model',
-            notice: buildApiConfigNotice(apiConfig.error),
+            ...buildApiConfigNotice(apiConfig.error),
           });
           isStartingRef.current = false;
           return;
@@ -205,6 +238,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         systemPrompt: '',
         executionMode: config.executionMode || 'local',
         activeSkillIds: sessionSkillIds,
+        agentId: currentAgentId,
         messages: [
           {
             id: `msg-${now}`,
@@ -230,10 +264,13 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       dispatch(clearActiveSkills());
       dispatch(clearSelection());
 
-      // Combine skill prompt with system prompt
-      // If no manual skill selected, use auto-routing prompt
+      // Combine skill prompt with system prompt.
+      // OpenClaw loads skills natively via skills.load.extraDirs, so skip the
+      // auto-routing prompt to avoid injecting Claude SDK tool-calling instructions
+      // that confuse non-Claude models (e.g. kimi-k2.5 falls back to text-based
+      // tool calls, producing empty tool names and err=true failures).
       let effectiveSkillPrompt = skillPrompt;
-      if (!skillPrompt) {
+      if (!skillPrompt && !isOpenClawEngine) {
         effectiveSkillPrompt = await skillService.getAutoRoutingPrompt() || undefined;
       }
       const combinedSystemPrompt = [effectiveSkillPrompt, config.systemPrompt]
@@ -247,6 +284,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         cwd: config.workingDirectory || undefined,
         systemPrompt: combinedSystemPrompt,
         activeSkillIds: sessionSkillIds,
+        agentId: currentAgentId,
         imageAttachments,
       });
 
@@ -280,6 +318,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       // Stop immediately if user cancelled while startup request was in flight.
       if (isPendingStartCancelled() && startedSession) {
         await coworkService.stopSession(startedSession.id);
+        if (getPendingCancellationAction() === 'delete') {
+          await coworkService.deleteSession(startedSession.id);
+        }
       }
     } finally {
       if (pendingStartRef.current?.requestId === requestId) {
@@ -291,51 +332,67 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
   const handleContinueSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => {
     if (!currentSession) return;
+    // Prevent duplicate submissions
+    if (isContinuingRef.current) return;
     if (isOpenClawEngine && openClawStatus && !isOpenClawReadyForSession(openClawStatus)) {
       window.dispatchEvent(new CustomEvent('app:showToast', { detail: i18nService.t('coworkErrorEngineNotReady') }));
       return false;
     }
 
-    console.log('[CoworkView] handleContinueSession called', {
-      hasImageAttachments: !!imageAttachments,
-      imageAttachmentsCount: imageAttachments?.length ?? 0,
-      imageAttachmentsNames: imageAttachments?.map(a => a.name),
-      imageAttachmentsBase64Lengths: imageAttachments?.map(a => a.base64Data.length),
-    });
+    isContinuingRef.current = true;
+    try {
+      console.log('[CoworkView] handleContinueSession called', {
+        hasImageAttachments: !!imageAttachments,
+        imageAttachmentsCount: imageAttachments?.length ?? 0,
+        imageAttachmentsNames: imageAttachments?.map(a => a.name),
+        imageAttachmentsBase64Lengths: imageAttachments?.map(a => a.base64Data.length),
+      });
 
-    // Capture active skill IDs before clearing
-    const sessionSkillIds = [...activeSkillIds];
+      // Capture active skill IDs before clearing
+      const sessionSkillIds = [...activeSkillIds];
 
-    // Clear active skills after capturing so they don't persist to next message
-    if (sessionSkillIds.length > 0) {
-      dispatch(clearActiveSkills());
+      // Clear active skills after capturing so they don't persist to next message
+      if (sessionSkillIds.length > 0) {
+        dispatch(clearActiveSkills());
+      }
+
+      // Combine skill prompt with system prompt for continuation.
+      // Skip auto-routing prompt for OpenClaw — skills are loaded natively.
+      let effectiveSkillPrompt = skillPrompt;
+      if (!skillPrompt && !isOpenClawEngine) {
+        effectiveSkillPrompt = await skillService.getAutoRoutingPrompt() || undefined;
+      }
+      const combinedSystemPrompt = [effectiveSkillPrompt, config.systemPrompt]
+        .filter(p => p?.trim())
+        .join('\n\n') || undefined;
+
+      await coworkService.continueSession({
+        sessionId: currentSession.id,
+        prompt,
+        systemPrompt: combinedSystemPrompt,
+        activeSkillIds: sessionSkillIds.length > 0 ? sessionSkillIds : undefined,
+        imageAttachments,
+      });
+    } finally {
+      isContinuingRef.current = false;
     }
-
-    // Combine skill prompt with system prompt for continuation
-    // If no manual skill selected, use auto-routing prompt
-    let effectiveSkillPrompt = skillPrompt;
-    if (!skillPrompt) {
-      effectiveSkillPrompt = await skillService.getAutoRoutingPrompt() || undefined;
-    }
-    const combinedSystemPrompt = [effectiveSkillPrompt, config.systemPrompt]
-      .filter(p => p?.trim())
-      .join('\n\n') || undefined;
-
-    await coworkService.continueSession({
-      sessionId: currentSession.id,
-      prompt,
-      systemPrompt: combinedSystemPrompt,
-      activeSkillIds: sessionSkillIds.length > 0 ? sessionSkillIds : undefined,
-      imageAttachments,
-    });
   };
 
   const handleStopSession = async () => {
     if (!currentSession) return;
     if (currentSession.id.startsWith('temp-') && pendingStartRef.current) {
       pendingStartRef.current.cancelled = true;
+      pendingStartRef.current.cancellationAction = 'stop';
     }
     await coworkService.stopSession(currentSession.id);
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (sessionId.startsWith('temp-') && pendingStartRef.current) {
+      pendingStartRef.current.cancelled = true;
+      pendingStartRef.current.cancellationAction = 'delete';
+    }
+    await coworkService.deleteSession(sessionId);
   };
 
   // Get selected quick action
@@ -365,7 +422,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         dispatch(clearSelection());
       }
     }
-  }, [activeSkillIds]);
+  }, [activeSkillIds, dispatch, quickActions, selectedActionId]);
 
   // Handle prompt selection from QuickAction
   const handleQuickActionPromptSelect = (prompt: string) => {
@@ -401,16 +458,16 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     return () => {
       window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [currentSession?.id, currentSession?.status, isOpenClawEngine]);
+  }, [currentSession, isOpenClawEngine]);
 
   if (!isInitialized) {
     return (
-      <div className="flex-1 h-full flex flex-col dark:bg-claude-darkBg bg-claude-bg">
-        <div className="draggable flex h-12 items-center justify-end px-4 border-b dark:border-claude-darkBorder border-claude-border shrink-0">
+      <div className="flex-1 h-full flex flex-col bg-background">
+        <div className="draggable flex h-12 items-center justify-end px-4 border-b border-border shrink-0">
           <WindowTitleBar inline />
         </div>
         <div className="flex-1 flex items-center justify-center">
-          <div className="dark:text-claude-darkTextSecondary text-claude-textSecondary">
+          <div className="text-secondary">
             {i18nService.t('loading')}
           </div>
         </div>
@@ -425,28 +482,36 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     : true;
 
   const homeHeader = (
-    <div className="draggable flex h-12 items-center justify-between px-4 border-b dark:border-claude-darkBorder border-claude-border shrink-0">
+    <div className="draggable flex h-12 items-center justify-between px-4 border-b border-border shrink-0">
       <div className="non-draggable h-8 flex items-center">
         {isSidebarCollapsed && (
           <div className={`flex items-center gap-1 mr-2 ${isMac ? 'pl-[68px]' : ''}`}>
             <button
               type="button"
               onClick={onToggleSidebar}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-secondary hover:bg-surface-raised transition-colors"
             >
               <SidebarToggleIcon className="h-4 w-4" isCollapsed={true} />
             </button>
             <button
               type="button"
               onClick={onNewChat}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-lg dark:text-claude-darkTextSecondary text-claude-textSecondary hover:bg-claude-surfaceHover dark:hover:bg-claude-darkSurfaceHover transition-colors"
+              className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-secondary hover:bg-surface-raised transition-colors"
             >
               <ComposeIcon className="h-4 w-4" />
             </button>
             {updateBadge}
           </div>
         )}
-        <ModelSelector />
+        <ModelSelector
+          value={isOpenClawEngine ? headerSelectedModel : undefined}
+          onChange={isOpenClawEngine
+            ? async (nextModel) => {
+                if (!currentAgent || !nextModel) return;
+                await agentService.updateAgent(currentAgent.id, { model: toOpenClawModelRef(nextModel) });
+              }
+            : undefined}
+        />
       </div>
       <div className="non-draggable flex items-center">
         <div className="flex items-center gap-1.5 mr-2 px-2.5 py-1">
@@ -495,6 +560,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           onManageSkills={() => onShowSkills?.()}
           onContinue={handleContinueSession}
           onStop={handleStopSession}
+          onDeleteSession={handleDeleteSession}
           onNavigateHome={() => dispatch(clearCurrentSession())}
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={onToggleSidebar}
@@ -507,7 +573,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
   // Home view - no current session
   return (
-    <div className="flex-1 flex flex-col dark:bg-claude-darkBg bg-claude-bg h-full">
+    <div className="flex-1 flex flex-col bg-background h-full">
       {/* Engine status banner for error states */}
       {engineStatusBanner}
 
@@ -520,10 +586,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           {/* Welcome Section */}
           <div className="text-center space-y-5">
             <img src="logo.png" alt="logo" className="w-16 h-16 mx-auto" />
-            <h2 className="text-3xl font-bold tracking-tight dark:text-claude-darkText text-claude-text">
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">
               {i18nService.t('coworkWelcome')}
             </h2>
-            <p className="text-sm dark:text-claude-darkTextSecondary text-claude-textSecondary max-w-md mx-auto">
+            <p className="text-sm text-secondary max-w-md mx-auto">
               {i18nService.t('coworkDescription')}
             </p>
           </div>

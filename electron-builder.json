@@ -52,6 +52,12 @@
       ]
     }
   ],
+  "protocols": [
+    {
+      "name": "LobsterAI",
+      "schemes": ["lobsterai"]
+    }
+  ],
   "mac": {
     "target": [
       "dmg"
@@ -127,7 +133,7 @@
           "!**/tsconfig.*.json",
           "!**/*.test.*",
           "!**/*.spec.*",
-                "!**/tests/**",
+          "!**/tests/**",
           "!**/test/**",
           "!**/__tests__/**"
         ]
@@ -143,7 +149,7 @@
       "nsis"
     ],
     "icon": "build/icons/win/icon.ico",
-    "requestedExecutionLevel": "requireAdministrator",
+    "requestedExecutionLevel": "asInvoker",
     "extraResources": [
       {
         "from": "build-tar/win-resources.tar",
@@ -220,7 +226,7 @@
           "!**/tsconfig.*.json",
           "!**/*.test.*",
           "!**/*.spec.*",
-                "!**/tests/**",
+          "!**/tests/**",
           "!**/test/**",
           "!**/__tests__/**"
         ]
@@ -243,7 +249,7 @@
   "asarUnpack": [
     "node_modules/@anthropic-ai/claude-agent-sdk/**",
     "node_modules/@img/**",
-    "node_modules/sql.js/dist/**",
+    "node_modules/better-sqlite3/**",
     "node_modules/node-nim/**",
     "node_modules/npm/**"
   ],

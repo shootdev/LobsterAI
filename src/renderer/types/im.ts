@@ -3,6 +3,8 @@
  * Mirrors src/main/im/types.ts for use in React components
  */
 
+import type { Platform } from '@shared/platform';
+
 // ==================== DingTalk Types ====================
 
 export interface DingTalkOpenClawConfig {
@@ -29,12 +31,49 @@ export interface DingTalkGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+// ==================== DingTalk Multi-Instance Types ====================
+
+export const MAX_DINGTALK_INSTANCES = 5;
+
+export interface DingTalkInstanceConfig extends DingTalkOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface DingTalkInstanceStatus extends DingTalkGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface DingTalkMultiInstanceConfig {
+  instances: DingTalkInstanceConfig[];
+}
+
+export interface DingTalkMultiInstanceStatus {
+  instances: DingTalkInstanceStatus[];
+}
+
+export const DEFAULT_DINGTALK_MULTI_INSTANCE_CONFIG: DingTalkMultiInstanceConfig = {
+  instances: [],
+};
+
 // ==================== Feishu Types ====================
 
 export interface FeishuOpenClawGroupConfig {
   requireMention?: boolean;
   allowFrom?: string[];
   systemPrompt?: string;
+}
+
+export interface FeishuOpenClawFooterConfig {
+  status?: boolean;
+  elapsed?: boolean;
+}
+
+export interface FeishuOpenClawBlockStreamingCoalesceConfig {
+  minChars?: number;
+  maxChars?: number;
+  idleMs?: number;
 }
 
 export interface FeishuOpenClawConfig {
@@ -48,7 +87,11 @@ export interface FeishuOpenClawConfig {
   groupAllowFrom: string[];
   groups: Record<string, FeishuOpenClawGroupConfig>;
   historyLimit: number;
+  streaming: boolean;
   replyMode: 'auto' | 'static' | 'streaming';
+  blockStreaming: boolean;
+  footer: FeishuOpenClawFooterConfig;
+  blockStreamingCoalesce?: FeishuOpenClawBlockStreamingCoalesceConfig;
   mediaMaxMb: number;
   debug: boolean;
 }
@@ -60,6 +103,28 @@ export interface FeishuGatewayStatus {
   error: string | null;
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
+}
+
+// ==================== Feishu Multi-Instance Types ====================
+
+export const MAX_FEISHU_INSTANCES = 5;
+
+export interface FeishuInstanceConfig extends FeishuOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface FeishuInstanceStatus extends FeishuGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface FeishuMultiInstanceConfig {
+  instances: FeishuInstanceConfig[];
+}
+
+export interface FeishuMultiInstanceStatus {
+  instances: FeishuInstanceStatus[];
 }
 
 // ==================== Telegram Types ====================
@@ -202,16 +267,16 @@ export interface QzhuliGatewayStatus {
   lastOutboundAt: number | null;
 }
 
-// ==================== Xiaomifeng Types ====================
+// ==================== NetEase Bee Types ====================
 
-export interface XiaomifengConfig {
+export interface NeteaseBeeChanConfig {
   enabled: boolean;
   clientId: string;    // 小蜜蜂平台的 NIM 账号 ID
   secret: string;      // 用于 token 中继的密钥
   debug?: boolean;
 }
 
-export interface XiaomifengGatewayStatus {
+export interface NeteaseBeeChanGatewayStatus {
   connected: boolean;
   startedAt: number | null;
   lastError: string | null;
@@ -245,6 +310,28 @@ export interface QQGatewayStatus {
   lastError: string | null;
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
+}
+
+// ==================== QQ Multi-Instance Types ====================
+
+export const MAX_QQ_INSTANCES = 5;
+
+export interface QQInstanceConfig extends QQOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface QQInstanceStatus extends QQGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface QQMultiInstanceConfig {
+  instances: QQInstanceConfig[];
+}
+
+export interface QQMultiInstanceStatus {
+  instances: QQInstanceStatus[];
 }
 
 // ==================== WeCom (企业微信) Types ====================
@@ -324,17 +411,17 @@ export interface WeixinGatewayStatus {
 
 // ==================== Common IM Types ====================
 
-export type IMPlatform = 'dingtalk' | 'feishu' | 'qq' | 'telegram' | 'discord' | 'nim' | 'qzhuli' | 'xiaomifeng' | 'wecom' | 'popo' | 'weixin';
+export type IMPlatform = keyof Omit<IMGatewayConfig, 'settings'>;
 
 export interface IMGatewayConfig {
-  dingtalk: DingTalkOpenClawConfig;
-  feishu: FeishuOpenClawConfig;
+  dingtalk: DingTalkMultiInstanceConfig;
+  feishu: FeishuMultiInstanceConfig;
   telegram: TelegramOpenClawConfig;
-  qq: QQOpenClawConfig;
+  qq: QQMultiInstanceConfig;
   discord: DiscordOpenClawConfig;
   nim: NimConfig;
   qzhuli: QzhuliConfig;
-  xiaomifeng: XiaomifengConfig;
+  'netease-bee': NeteaseBeeChanConfig;
   wecom: WecomOpenClawConfig;
   popo: PopoOpenClawConfig;
   weixin: WeixinOpenClawConfig;
@@ -344,17 +431,19 @@ export interface IMGatewayConfig {
 export interface IMSettings {
   systemPrompt?: string;
   skillsEnabled: boolean;
+  /** Per-platform agent binding. Key = platform name, value = agent ID. Absent or 'main' = default. */
+  platformAgentBindings?: Record<string, string>;
 }
 
 export interface IMGatewayStatus {
-  dingtalk: DingTalkGatewayStatus;
-  feishu: FeishuGatewayStatus;
-  qq: QQGatewayStatus;
+  dingtalk: DingTalkMultiInstanceStatus;
+  feishu: FeishuMultiInstanceStatus;
+  qq: QQMultiInstanceStatus;
   telegram: TelegramGatewayStatus;
   discord: DiscordGatewayStatus;
   nim: NimGatewayStatus;
   qzhuli: QzhuliGatewayStatus;
-  xiaomifeng: XiaomifengGatewayStatus;
+  'netease-bee': NeteaseBeeChanGatewayStatus;
   wecom: WecomGatewayStatus;
   popo: PopoGatewayStatus;
   weixin: WeixinGatewayStatus;
@@ -376,7 +465,7 @@ export interface IMMediaAttachment {
 }
 
 export interface IMMessage {
-  platform: IMPlatform;
+  platform: Platform;
   messageId: string;
   conversationId: string;
   senderId: string;
@@ -437,7 +526,7 @@ export interface IMConnectivityCheck {
 }
 
 export interface IMConnectivityTestResult {
-  platform: IMPlatform;
+  platform: Platform;
   testedAt: number;
   verdict: IMConnectivityVerdict;
   checks: IMConnectivityCheck[];
@@ -494,7 +583,10 @@ export const DEFAULT_FEISHU_OPENCLAW_CONFIG: FeishuOpenClawConfig = {
   groupAllowFrom: [],
   groups: { '*': { requireMention: true } },
   historyLimit: 50,
+  streaming: true,
   replyMode: 'auto',
+  blockStreaming: false,
+  footer: { status: true, elapsed: true },
   mediaMaxMb: 30,
   debug: false,
 };
@@ -521,7 +613,7 @@ export const DEFAULT_NIM_CONFIG: NimConfig = {
   token: '',
 };
 
-export const DEFAULT_XIAOMIFENG_CONFIG: XiaomifengConfig = {
+export const DEFAULT_NETEASE_BEE_CONFIG: NeteaseBeeChanConfig = {
   enabled: false,
   clientId: '',
   secret: '',
@@ -574,6 +666,14 @@ export const DEFAULT_QQ_CONFIG: QQOpenClawConfig = {
   debug: false,
 };
 
+export const DEFAULT_QQ_MULTI_INSTANCE_CONFIG: QQMultiInstanceConfig = {
+  instances: [],
+};
+
+export const DEFAULT_FEISHU_MULTI_INSTANCE_CONFIG: FeishuMultiInstanceConfig = {
+  instances: [],
+};
+
 export const DEFAULT_WECOM_CONFIG: WecomOpenClawConfig = {
   enabled: false,
   botId: '',
@@ -621,14 +721,14 @@ export const DEFAULT_IM_SETTINGS: IMSettings = {
 };
 
 export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
-  dingtalk: DEFAULT_DINGTALK_OPENCLAW_CONFIG,
-  feishu: DEFAULT_FEISHU_OPENCLAW_CONFIG,
+  dingtalk: DEFAULT_DINGTALK_MULTI_INSTANCE_CONFIG,
+  feishu: DEFAULT_FEISHU_MULTI_INSTANCE_CONFIG,
   telegram: DEFAULT_TELEGRAM_OPENCLAW_CONFIG,
-  qq: DEFAULT_QQ_CONFIG,
+  qq: DEFAULT_QQ_MULTI_INSTANCE_CONFIG,
   discord: DEFAULT_DISCORD_OPENCLAW_CONFIG,
   nim: DEFAULT_NIM_CONFIG,
   qzhuli: DEFAULT_QZHULI_CONFIG,
-  xiaomifeng: DEFAULT_XIAOMIFENG_CONFIG,
+  'netease-bee': DEFAULT_NETEASE_BEE_CONFIG,
   wecom: DEFAULT_WECOM_CONFIG,
   popo: DEFAULT_POPO_CONFIG,
   weixin: DEFAULT_WEIXIN_CONFIG,
@@ -637,19 +737,10 @@ export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
 
 export const DEFAULT_IM_STATUS: IMGatewayStatus = {
   dingtalk: {
-    connected: false,
-    startedAt: null,
-    lastError: null,
-    lastInboundAt: null,
-    lastOutboundAt: null,
+    instances: [],
   },
   feishu: {
-    connected: false,
-    startedAt: null,
-    botOpenId: null,
-    error: null,
-    lastInboundAt: null,
-    lastOutboundAt: null,
+    instances: [],
   },
   telegram: {
     connected: false,
@@ -684,7 +775,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
     lastInboundAt: null,
     lastOutboundAt: null,
   },
-  xiaomifeng: {
+  'netease-bee': {
     connected: false,
     startedAt: null,
     lastError: null,
@@ -693,11 +784,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
     lastOutboundAt: null,
   },
   qq: {
-    connected: false,
-    startedAt: null,
-    lastError: null,
-    lastInboundAt: null,
-    lastOutboundAt: null,
+    instances: [],
   },
   wecom: {
     connected: false,

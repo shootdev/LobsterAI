@@ -8,13 +8,19 @@ import type {
   IMGatewayConfig,
   IMGatewayStatus,
   DingTalkOpenClawConfig,
+  DingTalkInstanceConfig,
+  DingTalkMultiInstanceConfig,
   FeishuOpenClawConfig,
+  FeishuInstanceConfig,
+  FeishuMultiInstanceConfig,
   TelegramOpenClawConfig,
   QQOpenClawConfig,
+  QQInstanceConfig,
+  QQMultiInstanceConfig,
   DiscordOpenClawConfig,
   NimConfig,
   QzhuliConfig,
-  XiaomifengConfig,
+  NeteaseBeeChanConfig,
   WecomOpenClawConfig,
   PopoOpenClawConfig,
   WeixinOpenClawConfig,
@@ -54,14 +60,61 @@ const imSlice = createSlice({
         discord: { ...DEFAULT_IM_CONFIG.discord, ...(config.discord || {}) },
         nim: { ...DEFAULT_IM_CONFIG.nim, ...(config.nim || {}) },
         qzhuli: { ...DEFAULT_IM_CONFIG.qzhuli, ...(config.qzhuli || {}) },
+        'netease-bee': { ...DEFAULT_IM_CONFIG['netease-bee'], ...(config['netease-bee'] || {}) },
         settings: { ...DEFAULT_IM_CONFIG.settings, ...(config.settings || {}) },
       };
     },
+    /** @deprecated Use setDingTalkInstanceConfig instead */
     setDingTalkConfig: (state, action: PayloadAction<Partial<DingTalkOpenClawConfig>>) => {
-      state.config.dingtalk = { ...state.config.dingtalk, ...action.payload };
+      // Backward compat: update first instance if exists
+      const first = state.config.dingtalk.instances[0];
+      if (first) {
+        Object.assign(first, action.payload);
+      }
     },
+    setDingTalkInstances: (state, action: PayloadAction<DingTalkInstanceConfig[]>) => {
+      state.config.dingtalk = { instances: action.payload };
+    },
+    setDingTalkMultiInstanceConfig: (state, action: PayloadAction<DingTalkMultiInstanceConfig>) => {
+      state.config.dingtalk = action.payload;
+    },
+    setDingTalkInstanceConfig: (state, action: PayloadAction<{ instanceId: string; config: Partial<DingTalkOpenClawConfig> }>) => {
+      const inst = state.config.dingtalk.instances.find(i => i.instanceId === action.payload.instanceId);
+      if (inst) Object.assign(inst, action.payload.config);
+    },
+    addDingTalkInstance: (state, action: PayloadAction<DingTalkInstanceConfig>) => {
+      state.config.dingtalk.instances.push(action.payload);
+    },
+    removeDingTalkInstance: (state, action: PayloadAction<string>) => {
+      state.config.dingtalk.instances = state.config.dingtalk.instances.filter(
+        i => i.instanceId !== action.payload
+      );
+    },
+    /** @deprecated Use setFeishuInstanceConfig instead */
     setFeishuConfig: (state, action: PayloadAction<Partial<FeishuOpenClawConfig>>) => {
-      state.config.feishu = { ...state.config.feishu, ...action.payload };
+      // Backward compat: update first instance if exists
+      const first = state.config.feishu.instances[0];
+      if (first) {
+        Object.assign(first, action.payload);
+      }
+    },
+    setFeishuInstances: (state, action: PayloadAction<FeishuInstanceConfig[]>) => {
+      state.config.feishu = { instances: action.payload };
+    },
+    setFeishuMultiInstanceConfig: (state, action: PayloadAction<FeishuMultiInstanceConfig>) => {
+      state.config.feishu = action.payload;
+    },
+    setFeishuInstanceConfig: (state, action: PayloadAction<{ instanceId: string; config: Partial<FeishuOpenClawConfig> }>) => {
+      const inst = state.config.feishu.instances.find(i => i.instanceId === action.payload.instanceId);
+      if (inst) Object.assign(inst, action.payload.config);
+    },
+    addFeishuInstance: (state, action: PayloadAction<FeishuInstanceConfig>) => {
+      state.config.feishu.instances.push(action.payload);
+    },
+    removeFeishuInstance: (state, action: PayloadAction<string>) => {
+      state.config.feishu.instances = state.config.feishu.instances.filter(
+        i => i.instanceId !== action.payload
+      );
     },
     setTelegramOpenClawConfig: (state, action: PayloadAction<Partial<TelegramOpenClawConfig>>) => {
       state.config.telegram = {
@@ -69,8 +122,31 @@ const imSlice = createSlice({
         ...action.payload,
       };
     },
+    /** @deprecated Use setQQInstanceConfig instead */
     setQQConfig: (state, action: PayloadAction<Partial<QQOpenClawConfig>>) => {
-      state.config.qq = { ...state.config.qq, ...action.payload };
+      // Backward compat: update first instance if exists
+      const first = state.config.qq.instances[0];
+      if (first) {
+        Object.assign(first, action.payload);
+      }
+    },
+    setQQInstances: (state, action: PayloadAction<QQInstanceConfig[]>) => {
+      state.config.qq = { instances: action.payload };
+    },
+    setQQMultiInstanceConfig: (state, action: PayloadAction<QQMultiInstanceConfig>) => {
+      state.config.qq = action.payload;
+    },
+    setQQInstanceConfig: (state, action: PayloadAction<{ instanceId: string; config: Partial<QQOpenClawConfig> }>) => {
+      const inst = state.config.qq.instances.find(i => i.instanceId === action.payload.instanceId);
+      if (inst) Object.assign(inst, action.payload.config);
+    },
+    addQQInstance: (state, action: PayloadAction<QQInstanceConfig>) => {
+      state.config.qq.instances.push(action.payload);
+    },
+    removeQQInstance: (state, action: PayloadAction<string>) => {
+      state.config.qq.instances = state.config.qq.instances.filter(
+        i => i.instanceId !== action.payload
+      );
     },
     setDiscordConfig: (state, action: PayloadAction<Partial<DiscordOpenClawConfig>>) => {
       state.config.discord = { ...state.config.discord, ...action.payload };
@@ -81,8 +157,8 @@ const imSlice = createSlice({
     setQzhuliConfig: (state, action: PayloadAction<Partial<QzhuliConfig>>) => {
       state.config.qzhuli = { ...state.config.qzhuli, ...action.payload };
     },
-    setXiaomifengConfig: (state, action: PayloadAction<Partial<XiaomifengConfig>>) => {
-      state.config.xiaomifeng = { ...state.config.xiaomifeng, ...action.payload };
+    setNeteaseBeeChanConfig: (state, action: PayloadAction<Partial<NeteaseBeeChanConfig>>) => {
+      state.config['netease-bee'] = { ...state.config['netease-bee'], ...action.payload };
     },
     setWecomConfig: (state, action: PayloadAction<Partial<WecomOpenClawConfig>>) => {
       state.config.wecom = { ...state.config.wecom, ...action.payload };
@@ -107,6 +183,7 @@ const imSlice = createSlice({
         discord: { ...DEFAULT_IM_STATUS.discord, ...(status.discord || {}) },
         nim: { ...DEFAULT_IM_STATUS.nim, ...(status.nim || {}) },
         qzhuli: { ...DEFAULT_IM_STATUS.qzhuli, ...(status.qzhuli || {}) },
+        'netease-bee': { ...DEFAULT_IM_STATUS['netease-bee'], ...(status['netease-bee'] || {}) },
       };
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
@@ -124,13 +201,28 @@ const imSlice = createSlice({
 export const {
   setConfig,
   setDingTalkConfig,
+  setDingTalkInstances,
+  setDingTalkMultiInstanceConfig,
+  setDingTalkInstanceConfig,
+  addDingTalkInstance,
+  removeDingTalkInstance,
   setFeishuConfig,
+  setFeishuInstances,
+  setFeishuMultiInstanceConfig,
+  setFeishuInstanceConfig,
+  addFeishuInstance,
+  removeFeishuInstance,
   setTelegramOpenClawConfig,
   setQQConfig,
+  setQQInstances,
+  setQQMultiInstanceConfig,
+  setQQInstanceConfig,
+  addQQInstance,
+  removeQQInstance,
   setDiscordConfig,
   setNimConfig,
   setQzhuliConfig,
-  setXiaomifengConfig,
+  setNeteaseBeeChanConfig,
   setWecomConfig,
   setPopoConfig,
   setWeixinConfig,
