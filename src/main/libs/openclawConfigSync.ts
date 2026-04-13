@@ -47,6 +47,16 @@ const mapExecutionModeToSandboxMode = (mode: CoworkExecutionMode, isEnterprise: 
  */
 export const OPENCLAW_AGENT_TIMEOUT_SECONDS = 3600;
 
+export const buildManagedCronConfig = (_skipMissedJobs?: boolean): {
+  enabled: boolean;
+  maxConcurrentRuns: number;
+  sessionRetention: string;
+} => ({
+  enabled: true,
+  maxConcurrentRuns: 3,
+  sessionRetention: '7d',
+});
+
 function shouldUseOpenAIResponsesApi(providerName?: string, baseURL?: string): boolean {
   if (providerName !== ProviderName.OpenAI) return false;
   if (!baseURL) return true;
@@ -942,12 +952,7 @@ export class OpenClawConfigSync {
           watch: true,
         },
       },
-      cron: {
-        enabled: true,
-        maxConcurrentRuns: 3,
-        sessionRetention: '7d',
-        skipMissedJobs: coworkConfig.skipMissedJobs ?? false
-      },
+      cron: buildManagedCronConfig(coworkConfig.skipMissedJobs),
       ...((() => {
         const pluginEntries: Record<string, unknown> = {
           ...Object.fromEntries(

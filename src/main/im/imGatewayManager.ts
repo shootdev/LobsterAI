@@ -753,15 +753,6 @@ export class IMGatewayManager extends EventEmitter {
       });
     }
 
-    if (platform === 'qq') {
-      addCheck({
-        code: 'qq_guild_mention_hint',
-        level: 'info',
-        message: t('imQqOpenClawHint'),
-        suggestion: t('imQqMentionHint'),
-      });
-    }
-
     return {
       platform,
       testedAt,
