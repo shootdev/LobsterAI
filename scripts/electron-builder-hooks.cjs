@@ -7,6 +7,7 @@ const asar = require('@electron/asar');
 const { ensurePortablePythonRuntime, checkRuntimeHealth } = require('./setup-python-runtime.js');
 const { syncLocalOpenClawExtensions } = require('./sync-local-openclaw-extensions.cjs');
 const { packMultipleSources } = require('./pack-openclaw-tar.cjs');
+const { classifyMissingRequiredNativePackages } = require('./openclaw-native-bindings.cjs');
 
 function isWindowsTarget(context) {
   return context?.electronPlatformName === 'win32';
@@ -122,6 +123,19 @@ function verifyPreinstalledPlugins(runtimeRoot, buildHint) {
   console.log(`[electron-builder-hooks] Verified ${plugins.length} preinstalled OpenClaw plugin(s).`);
 }
 
+function verifyRequiredNativePackages(runtimeRoot, targetId, buildHint) {
+  const missing = classifyMissingRequiredNativePackages(runtimeRoot, targetId);
+  if (missing.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    '[electron-builder-hooks] Required OpenClaw native packages are missing from runtime: '
+    + missing.join(', ')
+    + `. Run \`${buildHint}\` again so the runtime rebuild can repair optional native dependencies before packaging.`,
+  );
+}
+
 function classifyMissingPreinstalledPlugins(runtimeRoot, plugins) {
   const extensionsDir = path.join(runtimeRoot, 'extensions');
   const missingRequired = [];
@@ -165,6 +179,9 @@ function ensureBundledOpenClawRuntime(context) {
 
   // Verify preinstalled plugins are present in the runtime extensions directory
   verifyPreinstalledPlugins(runtimeRoot, buildHint);
+  if (targetId) {
+    verifyRequiredNativePackages(runtimeRoot, targetId, buildHint);
+  }
 
   // Verify gateway-bundle.mjs exists and is reasonably sized.
   // Without it, Windows first-launch falls back to loading ~1100 ESM modules
@@ -584,5 +601,6 @@ module.exports = {
   afterPack,
   __test__: {
     classifyMissingPreinstalledPlugins,
+    classifyMissingRequiredNativePackages,
   },
 };

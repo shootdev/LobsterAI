@@ -214,6 +214,37 @@ export npm_config_platform="$NPM_TARGET_PLATFORM"
 export npm_config_arch="$NPM_TARGET_ARCH"
 npm install --omit=dev --no-audit --no-fund
 
+echo "[openclaw-runtime] Verifying required native optional packages..."
+node - "$ELECTRON_ROOT" "$OUT_DIR" "$TARGET_ID" <<'NODE'
+const path = require('path');
+const electronRoot = process.argv[2];
+const runtimeRoot = process.argv[3];
+const targetId = process.argv[4];
+const {
+  classifyMissingRequiredNativePackages,
+  installMissingRequiredNativePackages,
+} = require(path.join(electronRoot, 'scripts', 'openclaw-native-bindings.cjs'));
+
+const missingBefore = classifyMissingRequiredNativePackages(runtimeRoot, targetId);
+if (missingBefore.length === 0) {
+  console.log('[openclaw-runtime] Required native optional packages are present.');
+  process.exit(0);
+}
+
+console.warn(
+  '[openclaw-runtime] Missing required native optional packages after npm install: '
+  + missingBefore.join(', ')
+  + '. Attempting targeted repair...',
+);
+
+const repaired = installMissingRequiredNativePackages(runtimeRoot, targetId, {
+  stdio: 'inherit',
+  env: process.env,
+});
+
+console.log(`[openclaw-runtime] Repaired native packages: ${repaired.join(', ')}`);
+NODE
+
 # Diagnostic: verify the architecture of bundled native modules.
 # This helps catch mismatch errors (e.g. bundled ARM64 module in an x64 package) early in the build logs.
 if command -v file >/dev/null 2>&1; then
