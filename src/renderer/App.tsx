@@ -6,6 +6,7 @@ import {
   selectFirstPendingPermission,
 } from './store/selectors/coworkSelectors';
 import Settings, { type SettingsOpenOptions } from './components/Settings';
+import { buildLoginSettingsOpenOptions } from './components/loginButtonNavigation';
 import Sidebar from './components/Sidebar';
 import Toast from './components/Toast';
 import WindowTitleBar from './components/window/WindowTitleBar';
@@ -260,7 +261,10 @@ const App: React.FC = () => {
   const handleShowSettings = useCallback((options?: SettingsOpenOptions) => {
     setSettingsOptions({
       initialTab: options?.initialTab,
+      initialImPlatform: options?.initialImPlatform,
       notice: options?.notice,
+      noticeI18nKey: options?.noticeI18nKey,
+      noticeExtra: options?.noticeExtra,
     });
     setShowSettings(true);
   }, []);
@@ -352,8 +356,8 @@ const App: React.FC = () => {
   }, []);
 
   const handleShowLogin = useCallback(() => {
-    showToast(i18nService.t('featureInDevelopment'));
-  }, [showToast]);
+    handleShowSettings(buildLoginSettingsOpenOptions());
+  }, [handleShowSettings]);
 
   const runUpdateCheck = useCallback(async () => {
     try {
@@ -696,7 +700,10 @@ const App: React.FC = () => {
             <Settings
               onClose={handleCloseSettings}
               initialTab={settingsOptions.initialTab}
+              initialImPlatform={settingsOptions.initialImPlatform}
               notice={settingsOptions.notice}
+              noticeI18nKey={settingsOptions.noticeI18nKey}
+              noticeExtra={settingsOptions.noticeExtra}
               onUpdateFound={handleUpdateFound}
               enterpriseConfig={enterpriseConfig}
             />
@@ -780,7 +787,10 @@ const App: React.FC = () => {
         <Settings
           onClose={handleCloseSettings}
           initialTab={settingsOptions.initialTab}
+          initialImPlatform={settingsOptions.initialImPlatform}
           notice={settingsOptions.notice}
+          noticeI18nKey={settingsOptions.noticeI18nKey}
+          noticeExtra={settingsOptions.noticeExtra}
           onUpdateFound={handleUpdateFound}
           enterpriseConfig={enterpriseConfig}
         />

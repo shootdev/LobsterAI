@@ -40,6 +40,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({
   onShowSettings,
+  onShowLogin,
   activeView,
   onShowSkills,
   onShowCowork,
@@ -319,7 +320,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="px-3 pb-3 pt-1 flex items-center gap-1">
           {!hideLogin && (
             <>
-              <LoginButton />
+              <LoginButton onShowLogin={onShowLogin} />
               <div className="flex-1" />
             </>
           )}

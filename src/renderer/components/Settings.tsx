@@ -30,6 +30,7 @@ import IMSettings from './im/IMSettings';
 import { imService } from '../services/im';
 import EmailSkillConfig from './skills/EmailSkillConfig';
 import { ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
+import type { Platform } from '@shared/platform';
 import { defaultConfig, type AppConfig, getVisibleProviders, isCustomProvider, getCustomProviderDefaultName,getProviderDisplayName } from '../config';
 import {
   OpenAIIcon,
@@ -54,6 +55,7 @@ type TabType = 'general'| 'coworkAgentEngine' | 'model' | 'coworkMemory' | 'cowo
 
 export type SettingsOpenOptions = {
   initialTab?: TabType;
+  initialImPlatform?: Platform;
   notice?: string;
   noticeI18nKey?: string;
   noticeExtra?: string;
@@ -568,7 +570,7 @@ const SendShortcutSelect: React.FC<{ value: string; onChange: (v: string) => voi
   );
 };
 
-const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, noticeI18nKey, noticeExtra, onUpdateFound, enterpriseConfig }) => {
+const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, initialImPlatform, notice, noticeI18nKey, noticeExtra, onUpdateFound, enterpriseConfig }) => {
   const dispatch = useDispatch();
   // 状态
   const [activeTab, setActiveTab] = useState<TabType>(initialTab ?? 'general');
@@ -3966,6 +3968,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
       case 'im':
         return (
           <IMSettings
+            initialPlatform={initialImPlatform}
             onCustomProviderSynced={(customProvider) => {
               setProviders((prev) => ({
                 ...prev,

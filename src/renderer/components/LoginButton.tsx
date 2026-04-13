@@ -221,7 +221,11 @@ const UserMenu: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 };
 
-const LoginButton: React.FC = () => {
+type LoginButtonProps = {
+  onShowLogin?: () => void;
+};
+
+const LoginButton: React.FC<LoginButtonProps> = ({ onShowLogin }) => {
   const { isLoggedIn, isLoading, user } = useSelector((state: RootState) => state.auth);
   const [showMenu, setShowMenu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -248,6 +252,10 @@ const LoginButton: React.FC = () => {
     if (isLoggedIn) {
       setShowMenu(!showMenu);
     } else {
+      if (onShowLogin) {
+        onShowLogin();
+        return;
+      }
       await authService.login();
     }
   };

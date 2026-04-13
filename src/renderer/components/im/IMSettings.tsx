@@ -102,13 +102,14 @@ function deepSet(obj: Record<string, unknown>, path: string, value: unknown): Re
 }
 
 type IMSettingsProps = {
+  initialPlatform?: Platform;
   onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
 };
 
-const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
+const IMSettings: React.FC<IMSettingsProps> = ({ initialPlatform, onCustomProviderSynced }) => {
   const dispatch = useDispatch();
   const { config, status, isLoading } = useSelector((state: RootState) => state.im);
-  const [activePlatform, setActivePlatform] = useState<Platform>('weixin');
+  const [activePlatform, setActivePlatform] = useState<Platform>(initialPlatform ?? 'weixin');
   const [activeQQInstanceId, setActiveQQInstanceId] = useState<string | null>(null);
   const [qqExpanded, setQqExpanded] = useState(false);
   const [activeFeishuInstanceId, setActiveFeishuInstanceId] = useState<string | null>(null);
@@ -153,6 +154,12 @@ const IMSettings: React.FC<IMSettingsProps> = ({ onCustomProviderSynced }) => {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (initialPlatform) {
+      setActivePlatform(initialPlatform);
+    }
+  }, [initialPlatform]);
 
   // Track component mounted state for async operations
   useEffect(() => {
