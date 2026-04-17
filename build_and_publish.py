@@ -84,6 +84,35 @@ def join_url(base_url: str, path_or_url: str) -> str:
   return f'{base_url.rstrip("/")}/{path_or_url.lstrip("/")}'
 
 
+def get_git_commit_id() -> str | None:
+  try:
+    result = subprocess.run(
+      ['git', 'rev-parse', 'HEAD'],
+      cwd=REPO_ROOT,
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+  except (FileNotFoundError, subprocess.CalledProcessError):
+    return None
+
+  commit_id = result.stdout.strip()
+  return commit_id or None
+
+
+def build_release_notes(base_notes: str | None, commit_id: str | None) -> str | None:
+  notes = first_non_empty(base_notes)
+  if not commit_id:
+    return notes
+
+  commit_line = f'commit: {commit_id}'
+  if not notes:
+    return commit_line
+  if commit_line in notes:
+    return notes
+  return f'{notes}\n{commit_line}'
+
+
 def request_json(url: str, headers: dict[str, str], payload: dict[str, Any] | None = None) -> dict[str, Any]:
   data = None
   request_headers = dict(headers)
@@ -212,7 +241,8 @@ def main() -> int:
     package_json.get('name'),
   )
   display_name = require_value('display_name', display_name)
-  release_notes = first_non_empty(args.release_notes, f'v{version} release')
+  git_commit_id = get_git_commit_id()
+  release_notes = build_release_notes(first_non_empty(args.release_notes, f'v{version} release'), git_commit_id)
 
   headers = {
     'Accept': 'application/json',
@@ -232,6 +262,8 @@ def main() -> int:
   log(f'Using artifact: {artifact_path}')
   log(f'Publishing version={version}, buildNumber={build_number}, architecture={architecture}')
   log(f'Using baseUrl={base_url}, appId={app_id}')
+  if git_commit_id:
+    log(f'Using git commit id: {git_commit_id}')
 
   policy_response = request_json(
     join_url(base_url, args.policy_path),
