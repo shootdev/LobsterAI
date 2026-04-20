@@ -3,30 +3,32 @@
  * Configuration UI for DingTalk, Feishu and Telegram IM bots
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { SignalIcon, XMarkIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import { RootState } from '../../store';
-import { imService } from '../../services/im';
-import { configService } from '../../services/config';
-import { defaultConfig, type AppConfig } from '../../config';
-import { setDingTalkConfig, setDingTalkInstanceConfig, setFeishuConfig, setFeishuInstanceConfig, setTelegramOpenClawConfig, setQQConfig, setQQInstanceConfig, setDiscordConfig, setNimConfig, setQzhuliConfig, setNeteaseBeeChanConfig, setWecomConfig, setWeixinConfig, setPopoConfig, clearError } from '../../store/slices/imSlice';
-import { i18nService } from '../../services/i18n';
-import type { IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, TelegramOpenClawConfig, DiscordOpenClawConfig, QzhuliConfig, WecomOpenClawConfig, PopoOpenClawConfig } from '../../types/im';
-import { MAX_QQ_INSTANCES, MAX_FEISHU_INSTANCES, MAX_DINGTALK_INSTANCES } from '../../types/im';
-import QQInstanceSettings from './QQInstanceSettings';
-import FeishuInstanceSettings from './FeishuInstanceSettings';
-import DingTalkInstanceSettings from './DingTalkInstanceSettings';
-import { PlatformRegistry } from '@shared/platform';
+import { CheckCircleIcon, ExclamationTriangleIcon,SignalIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import type { Platform } from '@shared/platform';
-import { getVisibleIMPlatforms } from '../../utils/regionFilter';
+import { PlatformRegistry } from '@shared/platform';
 import WecomAIBotSDK from '@wecom/wecom-aibot-sdk';
 import { QRCodeSVG } from 'qrcode.react';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
-import { SchemaForm } from './SchemaForm';
-import type { UiHint } from './SchemaForm';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+
+import { type AppConfig,defaultConfig } from '../../config';
+import { configService } from '../../services/config';
+import { i18nService } from '../../services/i18n';
+import { imService } from '../../services/im';
+import { RootState } from '../../store';
+import { clearError,setDingTalkConfig, setDingTalkInstanceConfig, setDiscordConfig, setFeishuConfig, setFeishuInstanceConfig, setNeteaseBeeChanConfig, setNimConfig, setPopoConfig, setQQConfig, setQQInstanceConfig, setQzhuliConfig, setTelegramOpenClawConfig, setWecomConfig, setWeixinConfig } from '../../store/slices/imSlice';
+import type { DiscordOpenClawConfig, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, PopoOpenClawConfig,QzhuliConfig, TelegramOpenClawConfig, WecomOpenClawConfig } from '../../types/im';
+import { MAX_DINGTALK_INSTANCES,MAX_FEISHU_INSTANCES, MAX_QQ_INSTANCES } from '../../types/im';
+import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import Modal from '../common/Modal';
+import DingTalkInstanceSettings from './DingTalkInstanceSettings';
+import FeishuInstanceSettings from './FeishuInstanceSettings';
+import QQInstanceSettings from './QQInstanceSettings';
+import { buildQzhuliQwenProviderSyncResult } from './qzhuliCustomProvider';
+import type { UiHint } from './SchemaForm';
+import { SchemaForm } from './SchemaForm';
 
 // Reusable guide card component for platform setup instructions
 const PlatformGuide: React.FC<{
@@ -103,7 +105,10 @@ function deepSet(obj: Record<string, unknown>, path: string, value: unknown): Re
 
 type IMSettingsProps = {
   initialPlatform?: Platform;
-  onCustomProviderSynced?: (customProvider: { enabled: boolean; baseUrl: string; apiKey: string }) => void;
+  onCustomProviderSynced?: (payload: {
+    providerKey: string;
+    provider: NonNullable<AppConfig['providers']>[string];
+  }) => void;
 };
 
 const IMSettings: React.FC<IMSettingsProps> = ({ initialPlatform, onCustomProviderSynced }) => {
@@ -522,36 +527,27 @@ const IMSettings: React.FC<IMSettingsProps> = ({ initialPlatform, onCustomProvid
     startQzhuliBindFlow();
   }, [configLoaded, hasQzhuliCredentials]);
 
-  const applyQzhuliModelConfigToCustomProvider = async (apiModelBaseUrl?: string, apiModelKey?: string) => {
-    const nextBaseUrl = apiModelBaseUrl?.trim();
-    const nextApiKey = apiModelKey?.trim();
-    if (!nextBaseUrl && !nextApiKey) {
-      return;
-    }
-
+  const applyQzhuliModelConfigToCustomProvider = useCallback(async (apiModelBaseUrl?: string, apiModelKey?: string) => {
     const appConfig = configService.getConfig();
     const providers = (appConfig.providers ?? defaultConfig.providers) as NonNullable<AppConfig['providers']>;
-    const customProvider = providers.custom;
+    const syncResult = buildQzhuliQwenProviderSyncResult(providers, {
+      apiModelBaseUrl,
+      apiModelKey,
+    });
+    if (!syncResult) {
+      return;
+    }
     const updatedProviders: NonNullable<AppConfig['providers']> = {
       ...providers,
-      custom: {
-        ...customProvider,
-        enabled: true,
-        baseUrl: nextBaseUrl || customProvider.baseUrl,
-        apiKey: nextApiKey || customProvider.apiKey,
-      },
+      [syncResult.providerKey]: syncResult.provider,
     };
 
     await configService.updateConfig({
       providers: updatedProviders,
     });
 
-    onCustomProviderSynced?.({
-      enabled: updatedProviders.custom.enabled,
-      baseUrl: updatedProviders.custom.baseUrl,
-      apiKey: updatedProviders.custom.apiKey,
-    });
-  };
+    onCustomProviderSynced?.(syncResult);
+  }, [onCustomProviderSynced]);
 
   useEffect(() => {
     if (!qzhuliBindModalOpen || !qzhuliBindKey) {
@@ -604,7 +600,7 @@ const IMSettings: React.FC<IMSettingsProps> = ({ initialPlatform, onCustomProvid
       cancelled = true;
       clearInterval(timer);
     };
-  }, [dispatch, onCustomProviderSynced, qzhuliBindModalOpen, qzhuliBindKey, qzhuliConfig]);
+  }, [applyQzhuliModelConfigToCustomProvider, dispatch, qzhuliBindModalOpen, qzhuliBindKey, qzhuliConfig]);
 
   const handleWeixinQrLogin = async () => {
     setWeixinQrStatus('loading');
