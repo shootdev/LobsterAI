@@ -918,19 +918,26 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                       value={coworkAgentEngine === 'openclaw' ? agentSelectedModel : null}
                       onChange={coworkAgentEngine === 'openclaw'
                         ? async (nextModel) => {
+                            if (!nextModel) return;
+                            const modelRef = toOpenClawModelRef(nextModel);
                             if (sessionId) {
-                              if (!nextModel) return;
-                              await coworkService.patchSession(sessionId, { model: toOpenClawModelRef(nextModel) });
+                              await coworkService.patchSession(sessionId, { model: modelRef });
+                              if (currentAgent && agentModelIsInvalid) {
+                                agentService.updateAgent(currentAgent.id, { model: modelRef });
+                              }
                               return;
                             }
-                            if (!currentAgent || !nextModel) return;
-                            await agentService.updateAgent(currentAgent.id, { model: toOpenClawModelRef(nextModel) });
+                            if (!currentAgent) return;
+                            agentService.updateAgent(currentAgent.id, { model: modelRef });
                           }
                         : undefined}
                     />
                     {coworkAgentEngine === 'openclaw' && agentModelIsInvalid && (
                       <span className="max-w-60 text-[11px] leading-4 text-red-500">
                         {i18nService.t('agentModelInvalidHint')}
+                        {currentAgent?.model && (
+                          <span className="opacity-70"> ({currentAgent.model.split('/').pop()})</span>
+                        )}
                       </span>
                     )}
                   </div>
