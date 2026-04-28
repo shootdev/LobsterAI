@@ -106,11 +106,12 @@ function buildServerFallbackModels(effectiveModelId: string): NonNullable<LocalP
   return models;
 }
 
-function normalizeProviderModels(providerName: string, models?: ProviderModelConfig[]): ProviderModelConfig[] {
+function normalizeProviderModels(providerName: string, models?: ProviderModelConfig[]): Array<{ id: string; name: string; supportsImage?: boolean }> {
   return (models ?? [])
     .filter(model => model.id?.trim())
     .map(model => ({
       ...model,
+      name: model.name || model.id,
       supportsImage: ProviderRegistry.resolveModelSupportsImage(
         providerName,
         model.id,
