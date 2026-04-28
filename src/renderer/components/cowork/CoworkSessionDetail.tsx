@@ -25,6 +25,7 @@ import { setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { CoworkImageAttachment,CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
 import type { Skill } from '../../types/skill';
 import { getCompactFolderName } from '../../utils/path';
+import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
 import Modal from '../common/Modal';
 import ComposeIcon from '../icons/ComposeIcon';
 import EllipsisHorizontalIcon from '../icons/EllipsisHorizontalIcon';
@@ -1167,6 +1168,12 @@ export const UserMessageItem: React.FC<{
   const [isHovered, setIsHovered] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
+  // Transform content for display: strip IM media metadata, render images inline
+  const displayContent = useMemo(
+    () => parseUserMessageForDisplay(message.content || ''),
+    [message.content]
+  );
+
   // Get skills used for this message
   const messageSkillIds = (message.metadata as CoworkMessageMetadata)?.skillIds || [];
   const messageSkills = messageSkillIds
@@ -1187,14 +1194,14 @@ export const UserMessageItem: React.FC<{
           <div className="flex items-start gap-3 flex-row-reverse">
             <div className="w-full min-w-0 flex flex-col items-end">
               <div className="w-fit max-w-[54rem] rounded-2xl px-4 py-2.5 bg-surface text-foreground shadow-subtle">
-                {message.content?.trim() && (
+                {displayContent?.trim() && (
                   <MarkdownContent
-                    content={message.content}
+                    content={displayContent}
                     className="max-w-none whitespace-pre-wrap break-words"
                   />
                 )}
                 {imageAttachments.length > 0 && (
-                  <div className={`flex flex-wrap gap-2 ${message.content?.trim() ? 'mt-2' : ''}`}>
+                  <div className={`flex flex-wrap gap-2 ${displayContent?.trim() ? 'mt-2' : ''}`}>
                     {imageAttachments.map((img, idx) => (
                       <div key={idx} className="relative group">
                         <img
@@ -1627,6 +1634,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       setRenameValue(currentSession.title);
       ignoreNextBlurRef.current = false;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRenaming, currentSession?.title]);
 
   useEffect(() => {
@@ -1660,6 +1668,11 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     setHoveredRailIndex(null);
   }, [currentSession?.id]);
 
+  const closeMenu = useCallback(() => {
+    setMenuPosition(null);
+    setShowConfirmDelete(false);
+  }, []);
+
   // Close menu on outside click
   useEffect(() => {
     if (!menuPosition) return;
@@ -1685,7 +1698,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleScroll);
     };
-  }, [menuPosition]);
+  }, [menuPosition, closeMenu]);
 
   // Helper: truncate path for display
   const truncatePath = (path: string, maxLength = 20): string => {
@@ -1719,11 +1732,6 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     if (position) {
       setMenuPosition(position);
     }
-    setShowConfirmDelete(false);
-  };
-
-  const closeMenu = () => {
-    setMenuPosition(null);
     setShowConfirmDelete(false);
   };
 
