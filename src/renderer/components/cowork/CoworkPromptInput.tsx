@@ -12,9 +12,9 @@ import { skillService } from '../../services/skill';
 import { RootState } from '../../store';
 import { selectDraftPrompts } from '../../store/selectors/coworkSelectors';
 import { addDraftAttachment, clearDraftAttachments, type DraftAttachment, setDraftAttachments, setDraftPrompt } from '../../store/slices/coworkSlice';
-import { setSkills, toggleActiveSkill } from '../../store/slices/skillSlice';
 import type { Model } from '../../store/slices/modelSlice';
 import { setSelectedModel } from '../../store/slices/modelSlice';
+import { setSkills, toggleActiveSkill } from '../../store/slices/skillSlice';
 import { CoworkImageAttachment } from '../../types/cowork';
 import { Skill } from '../../types/skill';
 import { toOpenClawModelRef } from '../../utils/openclawModelRef';
@@ -23,7 +23,7 @@ import PaperClipIcon from '../icons/PaperClipIcon';
 import XMarkIcon from '../icons/XMarkIcon';
 import ModelSelector from '../ModelSelector';
 import { ActiveSkillBadge,SkillsButton } from '../skills';
-import { resolveAgentModelSelection } from './agentModelSelection';
+import { resolveAgentModelSelection, resolveEffectiveModel } from './agentModelSelection';
 import AttachmentCard from './AttachmentCard';
 import FolderSelectorPopover from './FolderSelectorPopover';
 
@@ -459,7 +459,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     }
   };
 
-  const effectiveSelectedModel = coworkAgentEngine === 'openclaw' ? agentSelectedModel : globalSelectedModel;
+  const effectiveSelectedModel = resolveEffectiveModel({
+    sessionId,
+    agentSelectedModel,
+    globalSelectedModel,
+  });
   const modelSupportsImage = !!effectiveSelectedModel?.supportsImage;
 
   const addAttachment = useCallback((filePath: string, imageInfo?: { isImage: boolean; dataUrl?: string }) => {
