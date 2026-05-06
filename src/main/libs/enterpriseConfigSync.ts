@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import type { IMStore } from '../im/imStore';
+import type { PopoInstanceConfig } from '../im/types';
 import type { SqliteStore } from '../sqliteStore';
 
 export type EnterpriseUIAction = 'hide' | 'disable' | 'readonly';
@@ -697,7 +698,7 @@ function syncIMChannels(configPath: string, imStore: IMStore): void {
             ...accountCfg,
             instanceId: accountId,
             instanceName: (accountCfg as Record<string, unknown>).name as string || `POPO Bot ${idx + 1}`,
-          }));
+          })) as PopoInstanceConfig[];
           imStore.setPopoMultiInstanceConfig({ instances });
           return;
         }
