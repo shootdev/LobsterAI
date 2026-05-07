@@ -9,6 +9,7 @@ import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
 import { migrateScheduledTaskRunsToOpenclaw, migrateScheduledTasksToOpenclaw } from '../scheduledTask/migrate';
 import { AppUpdateIpc } from '../shared/appUpdate/constants';
+import { COWORK_MESSAGE_PAGE_SIZE, COWORK_SESSION_PAGE_SIZE } from '../shared/cowork/constants';
 import { PlatformRegistry } from '../shared/platform';
 import { ProviderName } from '../shared/providers';
 import { AgentManager } from './agentManager';
@@ -3119,12 +3120,14 @@ if (!gotTheLock) {
 
   ipcMain.handle('cowork:session:list', async (_event, options?: { limit?: number; offset?: number; agentId?: string }) => {
     try {
-      const limit = options?.limit ?? 50;
+      const limit = options?.limit ?? COWORK_SESSION_PAGE_SIZE;
       const offset = options?.offset ?? 0;
       const agentId = options?.agentId;
+      console.log(`[Pagination] listSessions limit=${limit} offset=${offset} agentId=${agentId ?? 'all'}`);
       const store = getCoworkStore();
       const sessions = store.listSessions(limit, offset, agentId);
       const total = store.countSessions(agentId);
+      console.log(`[Pagination] listSessions returned ${sessions.length} / total ${total}, hasMore=${offset + sessions.length < total}`);
       return { success: true, sessions, hasMore: offset + sessions.length < total };
     } catch (error) {
       return {
@@ -3136,10 +3139,12 @@ if (!gotTheLock) {
 
   ipcMain.handle('cowork:session:getMessages', async (_event, options: { sessionId: string; limit?: number; offset?: number }) => {
     try {
-      const { sessionId, limit = 50, offset = 0 } = options;
+      const { sessionId, limit = COWORK_MESSAGE_PAGE_SIZE, offset = 0 } = options;
+      console.log(`[Pagination] getMessages sessionId=${sessionId} limit=${limit} offset=${offset}`);
       const store = getCoworkStore();
       const total = store.countSessionMessages(sessionId);
       const messages = store.getPagedSessionMessages(sessionId, limit, offset);
+      console.log(`[Pagination] getMessages returned ${messages.length} / total ${total}`);
       return { success: true, messages, offset, total };
     } catch (error) {
       return {

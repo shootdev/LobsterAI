@@ -1072,6 +1072,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         executionMode: 'local' as CoworkExecutionMode,
         activeSkillIds: [],
         messages,
+        messagesOffset: 0,
+        totalMessages: messages.length,
         createdAt: firstTimestamp,
         updatedAt: firstTimestamp,
       };

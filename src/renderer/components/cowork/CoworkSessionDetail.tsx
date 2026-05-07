@@ -2184,6 +2184,28 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     }
   }, [currentSession?.id, currentSession?.messagesOffset]);
 
+  // Auto-load older messages if content doesn't fill the container (no scrollbar = onScroll never fires)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || isLoadingMoreMessagesRef.current) return;
+    const sessionId = currentSession?.id;
+    const offset = currentSession?.messagesOffset ?? 0;
+    if (!sessionId || offset <= 0) return;
+    if (container.scrollHeight <= container.clientHeight) {
+      isLoadingMoreMessagesRef.current = true;
+      setIsLoadingMoreMessages(true);
+      coworkService.loadMoreMessages(sessionId).then(() => {
+        requestAnimationFrame(() => {
+          isLoadingMoreMessagesRef.current = false;
+          setIsLoadingMoreMessages(false);
+        });
+      }).catch(() => {
+        isLoadingMoreMessagesRef.current = false;
+        setIsLoadingMoreMessages(false);
+      });
+    }
+  }, [currentSession?.id, currentSession?.messagesOffset, currentSession?.messages.length]);
+
   const navigateToRailItem = useCallback((railIndex: number) => {
     if (railIndex < 0 || railIndex >= railItemCountRef.current) return;
 

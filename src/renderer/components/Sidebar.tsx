@@ -78,6 +78,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [hasMoreSessions, isLoadingMore]);
 
+  // Auto-load more if content doesn't fill the container (no scrollbar = onScroll never fires)
+  useEffect(() => {
+    const el = sessionListScrollRef.current;
+    if (!el || !hasMoreSessions || isLoadingMore) return;
+    if (el.scrollHeight <= el.clientHeight) {
+      setIsLoadingMore(true);
+      coworkService.loadMoreSessions().finally(() => setIsLoadingMore(false));
+    }
+  }, [hasMoreSessions, isLoadingMore, filteredSessions.length]);
+
   useEffect(() => {
     const handleSearch = () => {
       onShowCowork();

@@ -6,6 +6,8 @@ import os from 'os';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
+import { COWORK_MESSAGE_PAGE_SIZE, COWORK_SESSION_PAGE_SIZE } from '../shared/cowork/constants';
+
 
 // Default working directory for new users
 const getDefaultWorkingDirectory = (): string => {
@@ -608,7 +610,7 @@ export class CoworkStore {
     };
   }
 
-  getSession(id: string, messageLimit = 50): CoworkSession | null {
+  getSession(id: string, messageLimit = COWORK_MESSAGE_PAGE_SIZE): CoworkSession | null {
     interface SessionRow {
       id: string;
       title: string;
@@ -760,7 +762,7 @@ export class CoworkStore {
     return row?.count || 0;
   }
 
-  listSessions(limit = 50, offset = 0, agentId?: string): CoworkSessionSummary[] {
+  listSessions(limit = COWORK_SESSION_PAGE_SIZE, offset = 0, agentId?: string): CoworkSessionSummary[] {
     interface SessionSummaryRow {
       id: string;
       title: string;
