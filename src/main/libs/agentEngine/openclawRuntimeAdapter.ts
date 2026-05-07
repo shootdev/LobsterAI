@@ -3532,6 +3532,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         metadata: usageMetadata as CoworkMessageMetadata,
       });
 
+      console.debug('[OpenClawRuntime] syncUsageMetadata success:', sessionId, model ?? 'unknown-model', `in=${inputTokens ?? '-'} out=${outputTokens ?? '-'} ctx=${contextPercent ?? '-'}%`);
+
       // Notify renderer to re-render the message with usage data
       const session = this.store.getSession(sessionId);
       if (session) {
