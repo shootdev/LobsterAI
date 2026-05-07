@@ -25,7 +25,7 @@ import { setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { CoworkImageAttachment,CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
 import type { Skill } from '../../types/skill';
 import { getCompactFolderName } from '../../utils/path';
-import { formatTokenCount } from '../../utils/tokenFormat';
+import { formatMessageTime, formatTokenCount } from '../../utils/tokenFormat';
 import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
 import Modal from '../common/Modal';
 import ComposeIcon from '../icons/ComposeIcon';
@@ -1255,6 +1255,9 @@ export const UserMessageItem: React.FC<{
                     ))}
                   </div>
                 )}
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 select-none">
+                  {formatMessageTime(message.timestamp)}
+                </span>
               </div>
             </div>
           </div>
@@ -1283,13 +1286,14 @@ const AssistantMessageItem: React.FC<{
   resolveLocalFilePath?: (href: string, text: string) => string | null;
   mapDisplayText?: (value: string) => string;
   showCopyButton?: boolean;
+  turnMetadata?: CoworkMessageMetadata | null;
 }> = ({
   message,
   resolveLocalFilePath,
   mapDisplayText,
   showCopyButton = false,
+  turnMetadata,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const displayContent = mapDisplayText ? mapDisplayText(message.content) : message.content;
 
@@ -1303,8 +1307,6 @@ const AssistantMessageItem: React.FC<{
   return (
     <div
       className="relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <div className="text-foreground">
         <MarkdownContent
@@ -1316,11 +1318,26 @@ const AssistantMessageItem: React.FC<{
         />
       </div>
       {showCopyButton && (
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="flex items-center gap-2 mt-1 text-[11px] text-zinc-400 dark:text-zinc-500 select-none">
           <CopyButton
             content={displayContent}
-            visible={isHovered}
+            visible={true}
           />
+          <span>{formatMessageTime(message.timestamp)}</span>
+          {turnMetadata?.usage?.inputTokens != null && (
+            <span>{`↑${formatTokenCount(turnMetadata.usage.inputTokens)}`}</span>
+          )}
+          {turnMetadata?.usage?.outputTokens != null && (
+            <span>{`↓${formatTokenCount(turnMetadata.usage.outputTokens)}`}</span>
+          )}
+          {turnMetadata?.contextPercent != null && (
+            <span className={turnMetadata.contextPercent >= 90 ? 'text-red-400' : turnMetadata.contextPercent >= 75 ? 'text-amber-400' : ''}>
+              {`${turnMetadata.contextPercent}% ctx`}
+            </span>
+          )}
+          {turnMetadata?.model && (
+            <span>{turnMetadata.model.includes('/') ? turnMetadata.model.split('/').pop() : turnMetadata.model}</span>
+          )}
         </div>
       )}
       {expandedImage && (
@@ -1437,43 +1454,6 @@ const ThinkingBlock: React.FC<{
   );
 };
 
-const MessageMetadataFooter: React.FC<{ turn: ConversationTurn }> = ({ turn }) => {
-  const finalMsg = [...turn.assistantItems]
-    .reverse()
-    .find(item => item.type === 'assistant' && item.message.metadata?.isFinal && item.message.metadata?.usage);
-  if (!finalMsg || finalMsg.type !== 'assistant') return null;
-  const meta = finalMsg.message.metadata;
-  const usage = meta?.usage;
-  if (!usage) return null;
-
-  const parts: Array<{ key: string; text: string; className?: string }> = [];
-  if (usage.inputTokens != null) {
-    parts.push({ key: 'in', text: `↑${formatTokenCount(usage.inputTokens)}` });
-  }
-  if (usage.outputTokens != null) {
-    parts.push({ key: 'out', text: `↓${formatTokenCount(usage.outputTokens)}` });
-  }
-  if (meta?.contextPercent != null) {
-    const pct = meta.contextPercent;
-    const cls = pct >= 90 ? 'text-red-400' : pct >= 75 ? 'text-amber-400' : '';
-    parts.push({ key: 'ctx', text: `${pct}% ctx`, className: cls });
-  }
-  if (meta?.model) {
-    const shortModel = meta.model.includes('/') ? meta.model.split('/').pop()! : meta.model;
-    parts.push({ key: 'model', text: shortModel });
-  }
-
-  if (parts.length === 0) return null;
-
-  return (
-    <div className="flex items-center gap-2 mt-1 text-[11px] text-zinc-400 dark:text-zinc-500 select-none">
-      {parts.map(p => (
-        <span key={p.key} className={p.className}>{p.text}</span>
-      ))}
-    </div>
-  );
-};
-
 export const AssistantTurnBlock: React.FC<{
   turn: ConversationTurn;
   resolveLocalFilePath?: (href: string, text: string) => string | null;
@@ -1585,6 +1565,7 @@ export const AssistantTurnBlock: React.FC<{
                 const hasToolGroupAfter = visibleAssistantItems
                   .slice(index + 1)
                   .some(laterItem => laterItem.type === 'tool_group');
+                const isLastAssistant = showCopyButtons && !hasToolGroupAfter;
 
                 return (
                   <AssistantMessageItem
@@ -1592,7 +1573,8 @@ export const AssistantTurnBlock: React.FC<{
                     message={item.message}
                     resolveLocalFilePath={resolveLocalFilePath}
                     mapDisplayText={mapDisplayText}
-                    showCopyButton={showCopyButtons && !hasToolGroupAfter}
+                    showCopyButton={isLastAssistant}
+                    turnMetadata={isLastAssistant ? (item.message.metadata as CoworkMessageMetadata) : undefined}
                   />
                 );
               }
@@ -1629,7 +1611,6 @@ export const AssistantTurnBlock: React.FC<{
               );
             })}
             {showTypingIndicator && <TypingDots />}
-            <MessageMetadataFooter turn={turn} />
           </div>
         </div>
       </div>

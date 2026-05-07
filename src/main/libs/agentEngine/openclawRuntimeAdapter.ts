@@ -3537,7 +3537,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       if (session) {
         const msg = session.messages.find(m => m.id === assistantMessageId);
         if (msg) {
-          this.emit('messageUpdate', sessionId, assistantMessageId, msg.content);
+          this.emit('messageUpdate', sessionId, assistantMessageId, msg.content, usageMetadata);
         }
       }
     } catch (error) {
