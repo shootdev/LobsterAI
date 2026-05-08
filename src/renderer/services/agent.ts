@@ -141,6 +141,16 @@ class AgentService {
     }
   }
 
+  async getPresetTemplates(): Promise<PresetAgent[]> {
+    try {
+      const presets = await window.electron?.agents?.presetTemplates();
+      return presets ?? [];
+    } catch (error) {
+      console.error('Failed to get preset agent templates:', error);
+      return [];
+    }
+  }
+
   async addPreset(presetId: string): Promise<Agent | null> {
     try {
       const agent = await window.electron?.agents?.addPreset(presetId);

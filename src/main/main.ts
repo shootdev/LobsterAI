@@ -8,6 +8,7 @@ import type { OpenClawSessionPatch } from '../common/openclawSession';
 import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
 import { migrateScheduledTaskRunsToOpenclaw, migrateScheduledTasksToOpenclaw } from '../scheduledTask/migrate';
+import { AgentIpcChannel } from '../shared/agent/constants';
 import { AppUpdateIpc } from '../shared/appUpdate/constants';
 import { COWORK_MESSAGE_PAGE_SIZE, COWORK_SESSION_PAGE_SIZE } from '../shared/cowork/constants';
 import { PlatformRegistry } from '../shared/platform';
@@ -3206,7 +3207,7 @@ if (!gotTheLock) {
 
   // ========== Agent IPC Handlers ==========
 
-  ipcMain.handle('agents:list', async () => {
+  ipcMain.handle(AgentIpcChannel.List, async () => {
     try {
       const agents = getAgentManager().listAgents();
       return { success: true, agents };
@@ -3215,7 +3216,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:get', async (_event, id: string) => {
+  ipcMain.handle(AgentIpcChannel.Get, async (_event, id: string) => {
     try {
       const agent = getAgentManager().getAgent(id);
       return { success: true, agent };
@@ -3224,7 +3225,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:create', async (_event, request: import('./coworkStore').CreateAgentRequest) => {
+  ipcMain.handle(AgentIpcChannel.Create, async (_event, request: import('./coworkStore').CreateAgentRequest) => {
     try {
       const agent = getAgentManager().createAgent(request, resolveDefaultAgentModelRef());
       // Sync config so workspace files (SOUL.md, IDENTITY.md) are written
@@ -3238,7 +3239,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:update', async (_event, id: string, updates: import('./coworkStore').UpdateAgentRequest) => {
+  ipcMain.handle(AgentIpcChannel.Update, async (_event, id: string, updates: import('./coworkStore').UpdateAgentRequest) => {
     try {
       const agent = getAgentManager().updateAgent(id, updates);
       syncOpenClawConfig({ reason: 'agent-updated' }).catch((err) => {
@@ -3250,7 +3251,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:delete', async (_event, id: string) => {
+  ipcMain.handle(AgentIpcChannel.Delete, async (_event, id: string) => {
     try {
       const result = getAgentManager().deleteAgent(id);
 
@@ -3287,7 +3288,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:presets', async () => {
+  ipcMain.handle(AgentIpcChannel.Presets, async () => {
     try {
       const presets = getAgentManager().getPresetAgents();
       return { success: true, presets };
@@ -3296,7 +3297,16 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('agents:addPreset', async (_event, presetId: string) => {
+  ipcMain.handle(AgentIpcChannel.PresetTemplates, async () => {
+    try {
+      const presets = getAgentManager().getAllPresetAgents();
+      return { success: true, presets };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get preset templates' };
+    }
+  });
+
+  ipcMain.handle(AgentIpcChannel.AddPreset, async (_event, presetId: string) => {
     try {
       const agent = getAgentManager().addPresetAgent(presetId, resolveDefaultAgentModelRef());
       syncOpenClawConfig({ reason: 'agent-preset-added' }).catch((err) => {

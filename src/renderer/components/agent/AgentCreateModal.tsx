@@ -10,11 +10,13 @@ import { i18nService } from '../../services/i18n';
 import { imService } from '../../services/im';
 import type { RootState } from '../../store';
 import type { Model } from '../../store/slices/modelSlice';
+import type { PresetAgent } from '../../types/agent';
 import type { DingTalkInstanceConfig, DiscordInstanceConfig, FeishuInstanceConfig, IMGatewayConfig, PopoInstanceConfig, QQInstanceConfig, WecomInstanceConfig } from '../../types/im';
 import { getAgentDisplayNameById } from '../../utils/agentDisplay';
 import { toOpenClawModelRef } from '../../utils/openclawModelRef';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import Modal from '../common/Modal';
+import AgentAvatarIcon from './AgentAvatarIcon';
 import AgentAvatarPicker from './AgentAvatarPicker';
 import AgentConfirmDialog from './AgentConfirmDialog';
 import AgentDetailToolbar from './AgentDetailToolbar';
@@ -49,6 +51,9 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   const [workingDirectory, setWorkingDirectory] = useState('');
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [presetTemplates, setPresetTemplates] = useState<PresetAgent[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeTab, setActiveTab] = useState<AgentDetailTab>(AgentDetailTab.Prompt);
   const globalSelectedModel = useSelector((state: RootState) => state.model.defaultSelectedModel);
   const agents = useSelector((state: RootState) => state.agent.agents);
@@ -98,10 +103,15 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
     setSkillIds([]);
     setActiveTab(AgentDetailTab.Prompt);
     setShowUnsavedConfirm(false);
+    setShowTemplatePicker(false);
     setBoundKeys(new Set());
     imService.loadConfig().then((cfg) => {
       if (cfg) setImConfig(cfg);
     });
+    setTemplatesLoading(true);
+    agentService.getPresetTemplates()
+      .then(setPresetTemplates)
+      .finally(() => setTemplatesLoading(false));
   }, [agents, coworkConfig.workingDirectory, currentAgentId, globalSelectedModel, isOpen]);
 
   useEffect(() => {
@@ -124,7 +134,20 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
     setWorkingDirectory('');
     setSkillIds([]);
     setActiveTab(AgentDetailTab.Prompt);
+    setShowTemplatePicker(false);
     setBoundKeys(new Set());
+  };
+
+  const handleApplyTemplate = (preset: PresetAgent) => {
+    const isEn = i18nService.getLanguage() === 'en';
+    setName(isEn && preset.nameEn ? preset.nameEn : preset.name);
+    setDescription(isEn && preset.descriptionEn ? preset.descriptionEn : preset.description);
+    setSystemPrompt(isEn && preset.systemPromptEn ? preset.systemPromptEn : preset.systemPrompt);
+    setIdentity('');
+    setIcon(preset.icon?.trim() || DefaultAgentAvatarIcon);
+    setSkillIds(preset.skillIds ?? []);
+    setActiveTab(AgentDetailTab.Prompt);
+    setShowTemplatePicker(false);
   };
 
   const handleClose = () => {
@@ -243,9 +266,18 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
             />
           </div>
         </div>
-        <button type="button" onClick={handleClose} className="mt-1 p-2 rounded-lg hover:bg-surface-raised transition-colors">
-          <XMarkIcon className="h-5 w-5 text-secondary" />
-        </button>
+        <div className="mt-1 flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowTemplatePicker(true)}
+            className="h-8 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-raised transition-colors"
+          >
+            {i18nService.t('agentUseTemplate')}
+          </button>
+          <button type="button" onClick={handleClose} className="p-2 rounded-lg hover:bg-surface-raised transition-colors">
+            <XMarkIcon className="h-5 w-5 text-secondary" />
+          </button>
+        </div>
       </div>
 
       {/* Tab bar */}
@@ -495,6 +527,16 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
         </Modal>
       )}
 
+      {showTemplatePicker && (
+        <AgentTemplatePickerModal
+          presets={presetTemplates}
+          loading={templatesLoading}
+          onClose={() => setShowTemplatePicker(false)}
+          onNew={() => setShowTemplatePicker(false)}
+          onSelect={handleApplyTemplate}
+        />
+      )}
+
       {showUnsavedConfirm && (
         <AgentConfirmDialog
           variant={AgentConfirmDialogVariant.Unsaved}
@@ -507,6 +549,86 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
         />
       )}
     </>
+  );
+};
+
+const AgentTemplatePickerModal: React.FC<{
+  presets: PresetAgent[];
+  loading: boolean;
+  onClose: () => void;
+  onNew: () => void;
+  onSelect: (preset: PresetAgent) => void;
+}> = ({ presets, loading, onClose, onNew, onSelect }) => {
+  const isEn = i18nService.getLanguage() === 'en';
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      overlayClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/10 dark:bg-black/50"
+      className="w-[calc(100vw-56px)] max-w-[760px] max-h-[82vh] rounded-xl border border-border/80 bg-surface shadow-[0_12px_40px_rgba(0,0,0,0.16)] overflow-hidden flex flex-col"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-4">
+        <h2 className="text-lg font-semibold text-foreground">
+          {i18nService.t('agentTemplateTitle')}
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onNew}
+            className="h-8 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-raised transition-colors"
+          >
+            {i18nService.t('agentTemplateNew')}
+          </button>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-surface-raised transition-colors">
+            <XMarkIcon className="h-5 w-5 text-secondary" />
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+        {loading ? (
+          <div className="flex h-40 items-center justify-center text-sm text-secondary">
+            {i18nService.t('loading')}
+          </div>
+        ) : presets.length === 0 ? (
+          <div className="flex h-40 items-center justify-center text-sm text-secondary">
+            {i18nService.t('agentTemplateEmpty')}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {presets.map((preset) => {
+              const name = isEn && preset.nameEn ? preset.nameEn : preset.name;
+              const description = isEn && preset.descriptionEn ? preset.descriptionEn : preset.description;
+
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onSelect(preset)}
+                  className="group flex min-h-[132px] flex-col items-start rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:border-primary/40 hover:bg-surface-raised"
+                >
+                  <div className="flex w-full items-center gap-3">
+                    <AgentAvatarIcon
+                      value={preset.icon}
+                      className="h-8 w-8"
+                      iconClassName="h-5 w-5"
+                      legacyClassName="text-2xl"
+                    />
+                    <div className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                      {name}
+                    </div>
+                  </div>
+                  <div className="mt-3 text-sm leading-6 text-foreground/90 line-clamp-3">
+                    {description}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 };
 
