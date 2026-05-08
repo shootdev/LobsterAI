@@ -852,9 +852,9 @@ export class CoworkStore {
     });
   }
 
-  addMessage(sessionId: string, message: Omit<CoworkMessage, 'id' | 'timestamp'>): CoworkMessage {
+  addMessage(sessionId: string, message: Omit<CoworkMessage, 'id' | 'timestamp'>, timestamp?: number): CoworkMessage {
     const id = uuidv4();
-    const now = Date.now();
+    const now = timestamp ?? Date.now();
 
     const seqRow = this.db
       .prepare(

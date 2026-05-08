@@ -895,6 +895,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   private contextWindowCache: Map<string, number> = new Map();
   private contextWindowCacheLoaded = false;
 
+  // Authoritative contextTokens from sessions.list (per sessionKey).
+  // Updated by pollChannelSessions and refreshSessionContextTokens.
+  private sessionContextTokensCache: Map<string, number> = new Map();
+
   private getContextWindowForModel(modelId: string): number | undefined {
     if (!this.contextWindowCacheLoaded) {
       this.contextWindowCacheLoaded = true;
@@ -926,6 +930,34 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       if (this.contextWindowCache.has(bare)) return this.contextWindowCache.get(bare);
     }
     return undefined;
+  }
+
+  private async refreshSessionContextTokens(sessionKey: string): Promise<number | undefined> {
+    if (this.sessionContextTokensCache.has(sessionKey)) {
+      return this.sessionContextTokensCache.get(sessionKey);
+    }
+    const client = this.gatewayClient;
+    if (!client) return undefined;
+    try {
+      const result = await client.request<{ sessions?: unknown[] }>('sessions.list', {
+        activeMinutes: 60, limit: 50,
+      }, { timeoutMs: 5_000 });
+      const sessions = result?.sessions;
+      if (Array.isArray(sessions)) {
+        for (const row of sessions) {
+          if (isRecord(row)) {
+            const k = typeof (row as Record<string, unknown>).key === 'string'
+              ? (row as Record<string, unknown>).key as string : '';
+            if (k && typeof (row as Record<string, unknown>).contextTokens === 'number') {
+              this.sessionContextTokensCache.set(k, (row as Record<string, unknown>).contextTokens as number);
+            }
+          }
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+    return this.sessionContextTokensCache.get(sessionKey);
   }
 
   constructor(
@@ -1222,6 +1254,11 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       for (const row of sessions) {
         const key = typeof row?.key === 'string' ? row.key : '';
         if (!key) continue;
+
+        // Cache contextTokens for all sessions returned by sessions.list
+        if (isRecord(row) && typeof (row as Record<string, unknown>).contextTokens === 'number') {
+          this.sessionContextTokensCache.set(key, (row as Record<string, unknown>).contextTokens as number);
+        }
         // Skip heartbeat-originated sessions (origin.label === 'heartbeat')
         if (isRecord(row)) {
           const rowOrigin = (row as Record<string, unknown>).origin;
@@ -3227,11 +3264,13 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
 
     if (!turn.assistantMessageId && turn.currentAssistantSegmentText) {
       // Create a new message for the new text segment (after split).
+      const msgTimestamp = isRecord(payload.message) && typeof (payload.message as Record<string, unknown>).timestamp === 'number'
+        ? (payload.message as Record<string, unknown>).timestamp as number : undefined;
       const assistantMessage = this.store.addMessage(sessionId, {
         type: 'assistant',
         content: turn.currentAssistantSegmentText,
         metadata: { isStreaming: true, isFinal: false },
-      });
+      }, msgTimestamp);
       turn.assistantMessageId = assistantMessage.id;
       this.emit('message', sessionId, assistantMessage);
     } else if (turn.assistantMessageId && turn.currentAssistantSegmentText) {
@@ -3315,6 +3354,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     if (segmentText === previousSegmentText && streamedText === previousText) return;
 
     if (!turn.assistantMessageId) {
+      const msgTimestamp = isRecord(payload.message) && typeof (payload.message as Record<string, unknown>).timestamp === 'number'
+        ? (payload.message as Record<string, unknown>).timestamp as number : undefined;
       const assistantMessage = this.store.addMessage(sessionId, {
         type: 'assistant',
         content: segmentText,
@@ -3322,7 +3363,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
           isStreaming: true,
           isFinal: false,
         },
-      });
+      }, msgTimestamp);
       turn.assistantMessageId = assistantMessage.id;
       turn.currentAssistantSegmentText = segmentText;
       this.emit('message', sessionId, assistantMessage);
@@ -3413,6 +3454,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       if (reusedMessageId) {
         turn.assistantMessageId = reusedMessageId;
       } else {
+        const msgTimestamp = isRecord(payload.message) && typeof (payload.message as Record<string, unknown>).timestamp === 'number'
+          ? (payload.message as Record<string, unknown>).timestamp as number : undefined;
         const assistantMessage = this.store.addMessage(sessionId, {
           type: 'assistant',
           content: finalSegmentText,
@@ -3420,7 +3463,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
             isStreaming: false,
             isFinal: true,
           },
-        });
+        }, msgTimestamp);
         turn.assistantMessageId = assistantMessage.id;
         this.emit('message', sessionId, assistantMessage);
       }
@@ -3626,12 +3669,20 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         ?? (typeof (usage as any).cache_read_input_tokens === 'number' ? (usage as any).cache_read_input_tokens : undefined);
       const model = typeof usageMsg.model === 'string' ? usageMsg.model : undefined;
 
-      // Compute contextPercent: input / contextWindow (matches OpenClaw web UI)
+      // Compute contextPercent: input / contextTokens (matches OpenClaw web UI)
+      // Primary source: sessions.list contextTokens (authoritative, matches gateway resolution)
+      // Fallback: local models.json contextWindow cache
       let contextPercent: number | undefined;
       if (typeof inputTokens === 'number' && inputTokens > 0) {
-        const contextWindow = this.getContextWindowForModel(model ?? '');
-        if (contextWindow && contextWindow > 0) {
-          contextPercent = Math.min(Math.round((inputTokens / contextWindow) * 100), 100);
+        let contextTokens = this.sessionContextTokensCache.get(sessionKey);
+        if (!contextTokens) {
+          contextTokens = await this.refreshSessionContextTokens(sessionKey);
+        }
+        if (!contextTokens) {
+          contextTokens = this.getContextWindowForModel(model ?? '');
+        }
+        if (contextTokens && contextTokens > 0) {
+          contextPercent = Math.min(Math.round((inputTokens / contextTokens) * 100), 100);
         }
       }
 
@@ -3686,9 +3737,15 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   ): Promise<void> {
     let contextPercent: number | undefined;
     if (typeof inputTokens === 'number' && inputTokens > 0) {
-      const contextWindow = this.getContextWindowForModel(model ?? '');
-      if (contextWindow && contextWindow > 0) {
-        contextPercent = Math.min(Math.round((inputTokens / contextWindow) * 100), 100);
+      let contextTokens = this.sessionContextTokensCache.get(sessionKey);
+      if (!contextTokens) {
+        contextTokens = await this.refreshSessionContextTokens(sessionKey);
+      }
+      if (!contextTokens) {
+        contextTokens = this.getContextWindowForModel(model ?? '');
+      }
+      if (contextTokens && contextTokens > 0) {
+        contextPercent = Math.min(Math.round((inputTokens / contextTokens) * 100), 100);
       }
     }
 

@@ -6,19 +6,22 @@ OpenClaw 原生 UI 在每条 assistant 消息底部展示一行统计信息（in
 
 ### 设计目标
 
-1. **展示关键统计** — 每条 assistant 回复底部展示 ↑input tokens、↓output tokens、context window 使用百分比、模型名称
-2. **持久化存储** — 元数据存入 SQLite，历史会话可查看（不依赖实时连接）
-3. **无侵入性** — 利用现有 metadata JSON 字段扩展，无需 DB schema 迁移
-4. **紧凑 UI** — 灰色小字展示，不干扰正常阅读
+1. **展示关键统计** — 每条 assistant 回复底部展示 ↑input tokens、↓output tokens、cache read tokens、context window 使用百分比、模型名称
+2. **展示 Agent 名称** — 展示当前 session 对应的 agent（如 "main"）
+3. **持久化存储** — 元数据存入 SQLite，历史会话可查看（不依赖实时连接）
+4. **无侵入性** — 利用现有 metadata JSON 字段扩展，无需 DB schema 迁移
+5. **紧凑 UI** — 灰色小字展示，不干扰正常阅读
+6. **时间戳精确** — 消息时间使用服务端事件时间戳，与 OpenClaw 后台一致
 
 ### 不包含的内容
 
-- Agent 名称展示（如 "main"）
 - 费用/成本展示
 
 ### 影响范围
 
-- **主进程**：`openclawRuntimeAdapter.ts` — 数据提取与 ctx% 计算
+- **主进程**：`openclawRuntimeAdapter.ts` — 数据提取、ctx% 计算、contextTokens 缓存、时间戳修复
+- **主进程**：`coworkStore.ts` — addMessage 支持可选 timestamp
+- **主进程**：`openclawHistory.ts` — GatewayHistoryEntry 扩展 usage/model
 - **渲染进程**：类型定义、UI 组件、格式化工具
 
 ---
@@ -50,13 +53,36 @@ OpenClaw 的 `chat` 事件在 `state=final` 时，`payload.message` 包含：
 
 ### 2.2 contextTokens 来源
 
-OpenClaw gateway 在 `sessions.list` RPC 响应的每个 session row 中返回 `contextTokens` 字段。该值由 gateway 内部通过三层 fallback 解析：
+OpenClaw gateway 在 `sessions.list` RPC 响应的每个 session row 中返回 `contextTokens` 字段。该值由 gateway 内部通过完整的 provider catalog 发现链解析（`src/agents/context.ts:resolveContextTokensForModel`）：
 
-1. **用户配置**：`cfg.agents.defaults.contextTokens`
-2. **Model registry 查找**：`lookupContextTokens(model)` — 从内置 model registry / models.json 缓存
-3. **兜底默认值**：`DEFAULT_CONTEXT_TOKENS = 200_000`
+1. **Session entry 存储值**：`entry?.contextTokens`
+2. **Transcript usage**：`transcriptUsage?.contextTokens`
+3. **完整发现链**：`resolveContextTokensForModel(cfg, provider, model)` — config 配置 → provider extension catalog → discovery runtime
 
-**结论**：`contextTokens` 总能获取到值（最差情况下为 200k 默认值），无需客户端维护模型映射表。
+其中 provider catalog（如 `openclaw/extensions/moonshot/provider-catalog.ts`）定义了精确的模型 contextWindow（如 kimi-k2.5 = 262144）。
+
+#### ⚠️ 为什么不能从本地 models.json 读取
+
+LobsterAI 的 `openclawConfigSync.ts` 写入 `models.json` 时，只使用 `PROVIDER_REGISTRY.modelDefaults.contextWindow`（如 Moonshot 硬编码 256000），这与 OpenClaw gateway 通过 provider extension catalog 解析到的值（262144）不一致。
+
+**实测**：input=58154，models.json 中 contextWindow=200000 → 我们计算 29%，而 OpenClaw 后台用 256000（或 262144）→ 显示 23%。
+
+**结论**：必须从 `sessions.list` 返回的 `contextTokens` 获取权威值，这是唯一能与 OpenClaw 后台完全对齐的方式。本地 `getContextWindowForModel()` 仅作为极端 fallback。
+
+### 2.3 Agent Name 来源
+
+Agent 名称从 `sessionKey` 解析：
+- **Managed 会话**：`agent:{agentId}:lobsterai:{sessionId}` → `agentId` 即为 agent name（如 "main"）
+- **IM 渠道**：`openclaw-weixin:...` 等非 managed 格式 → 默认 "main"
+- **实现**：复用已有的 `parseManagedSessionKey()` 函数
+
+### 2.4 消息时间戳来源
+
+OpenClaw `chat.final` / `chat.delta` 事件的 `payload.message` 中包含 `timestamp: Date.now()`（服务端发送事件时的时间）。
+
+**问题**：LobsterAI 之前在 `coworkStore.addMessage()` 中使用本地 `Date.now()`（收到事件时的时间），导致与 OpenClaw 后台显示的时间有 ~1 分钟偏差（网络传输 + 本地处理延迟）。
+
+**修复**：从事件 payload 中提取 `message.timestamp`，传入 `addMessage()` 作为消息时间戳。
 
 ### 2.3 当前 LobsterAI 提取情况
 
@@ -132,6 +158,7 @@ export interface CoworkMessageMetadata {
   };
   contextPercent?: number;  // 上下文窗口使用百分比（写入时计算）
   model?: string;           // 使用的模型名称
+  agentName?: string;       // Agent 名称（从 sessionKey 解析）
 
   [key: string]: unknown;
 }
@@ -160,21 +187,37 @@ export interface CoworkMessageMetadata {
 
 ### 4.1 contextTokens 获取
 
-**方案**：在 session 创建/同步时，从 `sessions.list` 返回的 session row 中提取 `contextTokens` 并缓存到 `ActiveTurn` 或 session 级内存结构中。
+**方案**：维护 `sessionContextTokensCache: Map<string, number>`（按 sessionKey 索引），两条填充路径：
 
-LobsterAI 已在 line 1170 调用 `sessions.list`，当前未提取 `contextTokens`。修改该处，将 `contextTokens` 存入 session 级缓存：
+1. **pollChannelSessions 顺带更新**：已有的 `sessions.list` 轮询（~10s 间隔，`activeMinutes: 60`）遍历返回的 session rows，提取每个 row 的 `contextTokens` 存入缓存。所有活跃 session（含 managed）都会出现在结果中。
+
+2. **按需刷新**：`refreshSessionContextTokens(sessionKey)` — 如果缓存中无该 sessionKey，发起一次 `sessions.list` 查询并缓存全部结果。
+
+3. **Fallback**：如果上述都 miss，降级到 `getContextWindowForModel(model)` 从本地 `models.json` 读取（不精确但有值比无值好）。
 
 ```typescript
-// 在 session 信息中缓存 contextTokens
-const sessionRow = sessions.find(s => s.key === sessionKey);
-if (sessionRow?.contextTokens) {
-  this.sessionContextTokens.set(sessionId, sessionRow.contextTokens);
+private sessionContextTokensCache: Map<string, number> = new Map();
+
+// 在 pollChannelSessions 中
+for (const row of sessions) {
+  const key = typeof row?.key === 'string' ? row.key : '';
+  if (key && typeof row.contextTokens === 'number') {
+    this.sessionContextTokensCache.set(key, row.contextTokens);
+  }
 }
 ```
 
-新增实例属性：
+新增 `refreshSessionContextTokens` 方法：
 ```typescript
-private sessionContextTokens = new Map<string, number>();
+private async refreshSessionContextTokens(sessionKey: string): Promise<number | undefined> {
+  if (this.sessionContextTokensCache.has(sessionKey)) {
+    return this.sessionContextTokensCache.get(sessionKey);
+  }
+  // 发起 sessions.list 查询，缓存全部结果
+  const result = await client.request('sessions.list', { activeMinutes: 60, limit: 50 });
+  // ... 遍历提取 contextTokens ...
+  return this.sessionContextTokensCache.get(sessionKey);
+}
 ```
 
 ### 4.2 handleChatFinal() 修改
@@ -321,11 +364,14 @@ export function formatTokenCount(tokens: number): string {
 ### 6.2 展示格式
 
 ```
-↑29.6k  ↓647  15% ctx  qwen3.6-plus
+main  09:42  ↑29.6k  ↓647  R59.4k  23% ctx  kimi-k2.5
 ```
 
+- Agent 名称（仅当非空时展示，如 "main"）
+- 时间戳（HH:mm 格式，使用服务端事件时间）
 - `↑` + input tokens（格式化后）
 - `↓` + output tokens（格式化后）
+- `R` + cache read tokens（格式化后，仅命中 prompt cache 时展示）
 - `N% ctx`（上下文占用率）
 - 模型名称（去掉 provider 前缀，如 `anthropic/claude-sonnet-4` → `claude-sonnet-4`）
 
@@ -398,21 +444,21 @@ if (updates.metadata !== undefined) {
 
 **应对**：三条路径都必须写入 usage metadata（见第 4.3 节三处写入位置）。
 
-### 7.3 contextTokens 可能不准确（低风险）
+### 7.3 contextTokens 精度（已修复 → 极低风险）
 
-**风险等级**：低 — ctx% 数值偏差
+**原问题**：从本地 `models.json` 读取 contextWindow（如 200000）与 OpenClaw 网关实际解析值（如 262144）不一致，导致 ctx% 偏差（显示 29% 而非 23%）。
 
-**场景**：如果用户使用 OpenClaw 不认识的自定义模型（如本地部署），且未在 config 中配置 `contextTokens`，gateway 会 fallback 到默认值 200k。此时 ctx% 计算基数不准确。
+**修复**：改为从 `sessions.list` 返回的 `contextTokens` 获取权威值（与 OpenClaw 后台一致）。仅在极端 fallback 情况下才使用本地 models.json。
 
-**应对**：属于边缘情况，不会导致功能异常。可在 UI 中当 ctx% < 1% 时不展示（可能是默认值过大导致的假数据）。
+**残留风险**：如果用户使用 OpenClaw 不认识的自定义模型且未配置 `contextTokens`，gateway 会 fallback 到默认值。此时 ctx% 不精确但不影响功能。
 
-### 7.4 sessionContextTokens 缓存未命中（低风险）
+### 7.4 sessionContextTokensCache 缓存未命中（极低风险）
 
-**风险等级**：低 — ctx% 不展示
+**风险等级**：极低 — 有按需刷新兜底
 
-**场景**：如果 session 创建后未经过 `sessions.list` 调用（直接通过 `chat.send` 创建新 session），`sessionContextTokens` map 中可能无对应条目。
+**场景**：新 session 首次 run 结束时，`pollChannelSessions` 可能还没轮询到该 session。
 
-**应对**：`contextPercent` 为 undefined 时 UI 不展示 ctx%。后续可在 session 首次收到 chat.final 时补查一次 sessions.preview。
+**应对**：`refreshSessionContextTokens()` 会按需发起一次 `sessions.list` 查询。如果仍然 miss（极端情况），fallback 到本地 `getContextWindowForModel()`。UI 在 contextPercent 为 undefined 时不展示 ctx%。
 
 ### 7.5 SQLite 老数据兼容（低风险）
 
@@ -489,11 +535,13 @@ npm test -- tokenFormat
 
 | 文件 | 角色 | 变更类型 |
 |------|------|----------|
-| `src/main/libs/agentEngine/openclawRuntimeAdapter.ts` | 提取 usage/model，计算 ctx%，缓存 contextTokens | 修改 |
-| `src/renderer/types/cowork.ts` | 新增 `usage`、`contextPercent`、`model` 类型定义 | 修改 |
+| `src/main/libs/agentEngine/openclawRuntimeAdapter.ts` | 提取 usage/model/agentName，sessionContextTokensCache，ctx% 计算，时间戳传递 | 修改 |
+| `src/main/coworkStore.ts` | addMessage 支持可选 timestamp；CoworkMessageMetadata 新增 agentName | 修改 |
+| `src/main/libs/openclawHistory.ts` | GatewayHistoryEntry 扩展 usage（含 cacheRead/totalTokens）、model | 修改 |
+| `src/renderer/types/cowork.ts` | 新增 `usage`、`contextPercent`、`model`、`agentName` 类型定义 | 修改 |
 | `src/renderer/utils/tokenFormat.ts` | Token 格式化工具 | 新增 |
 | `src/renderer/utils/tokenFormat.test.ts` | 格式化工具单元测试 | 新增 |
-| `src/renderer/components/cowork/CoworkSessionDetail.tsx` | 渲染元数据行 | 修改 |
+| `src/renderer/components/cowork/CoworkSessionDetail.tsx` | 渲染元数据行（含 agentName、cacheRead、时间戳） | 修改 |
 
 ---
 
@@ -581,3 +629,56 @@ contextPercent 可选获取：如果 reconcile 内方便拿到 `sessions.preview
 2. managed 会话（主窗口）功能不受影响
 3. 重启应用 → 历史 IM 消息仍展示 metadata
 4. TypeScript 编译 + ESLint 通过
+
+---
+
+## 11. 迭代记录
+
+### 11.1 ctx% 计算公式确认（2026-05-07）
+
+通过阅读 OpenClaw 源码 `ui/src/ui/chat/grouped-render.ts:289` 确认公式：
+
+```typescript
+contextPercent = Math.round((input / contextWindow) * 100)
+```
+
+- **分子**：`usage.input`（本轮非缓存 input tokens，**不含** cacheRead）
+- **分母**：`contextWindow`（模型上下文窗口大小）
+- **语义**：本轮新增非缓存 token 占上下文窗口的百分比
+
+### 11.2 ctx% 数值不准（29% vs 23%）修复（2026-05-08）
+
+**问题**：LobsterAI 显示 29%，OpenClaw 后台显示 23%，差异 6 个百分点。
+
+**根因**：分母不同。
+- 我们从 `models.json` 读取 contextWindow=200000（由 openclawConfigSync 写入，使用 PROVIDER_REGISTRY 硬编码值）
+- OpenClaw 网关通过 provider extension catalog 解析到 contextWindow=262144（kimi-k2.5 真实值）
+- `58154 / 200000 = 29%` vs `58154 / 256000 ≈ 23%`
+
+**修复**：改为从 `sessions.list` 返回的 `contextTokens` 获取权威值（网关完整发现链计算）。保留 `getContextWindowForModel()` 作为极端 fallback。
+
+### 11.3 Cache Read Tokens 支持（2026-05-07）
+
+- 从 `chat.final` 和 `chat.history` 的 `message.usage.cacheRead` 字段提取
+- 兼容字段名：`cacheRead` / `cacheReadTokens` / `cache_read_input_tokens`
+- UI 展示为 `R{n}`（如 `R59.4k`），仅命中 prompt cache 时展示
+
+### 11.4 Agent Name 支持（2026-05-07）
+
+- 从 sessionKey 解析：`agent:{agentId}:lobsterai:{sessionId}` → agentId
+- IM 渠道 sessionKey 无法解析时 fallback 到 "main"
+- UI 展示在时间戳前
+
+### 11.5 消息时间戳修复（2026-05-08）
+
+**问题**：LobsterAI 显示 9:43，OpenClaw 后台显示 9:42。
+
+**根因**：`coworkStore.addMessage()` 使用本地 `Date.now()`（收到事件时），而非事件 payload 中的 `message.timestamp`（服务端发送时）。
+
+**修复**：
+- `addMessage()` 新增可选 `timestamp` 参数
+- `handleChatDelta` / `handleChatFinal` 创建消息时，从 `payload.message.timestamp` 提取服务端时间传入
+
+### 11.6 0% ctx 正常情况说明
+
+当 `input < contextWindow * 0.005` 时，四舍五入为 0%，属正常情况。OpenClaw 后台同样显示 0%。
