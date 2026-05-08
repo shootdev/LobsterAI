@@ -712,18 +712,6 @@ const toToolInputRecord = (value: unknown): Record<string, unknown> => {
   return { value };
 };
 
-const computeSuffixPrefixOverlap = (left: string, right: string): number => {
-  const leftProbe = left.slice(-256);
-  const rightProbe = right.slice(0, 256);
-  const maxOverlap = Math.min(leftProbe.length, rightProbe.length);
-  for (let size = maxOverlap; size > 0; size -= 1) {
-    if (leftProbe.slice(-size) === rightProbe.slice(0, size)) {
-      return size;
-    }
-  }
-  return 0;
-};
-
 const mergeStreamingText = (
   previousText: string,
   incomingText: string,
@@ -750,8 +738,7 @@ const mergeStreamingText = (
     if (incomingText.startsWith(previousText)) {
       return { text: incomingText, mode: 'snapshot' };
     }
-    const overlap = computeSuffixPrefixOverlap(previousText, incomingText);
-    return { text: previousText + incomingText.slice(overlap), mode };
+    return { text: previousText + incomingText, mode };
   }
 
   if (incomingText.startsWith(previousText)) {
@@ -764,11 +751,9 @@ const mergeStreamingText = (
     return { text: incomingText, mode: 'snapshot' };
   }
 
-  const overlap = computeSuffixPrefixOverlap(previousText, incomingText);
-  if (overlap > 0) {
-    return { text: previousText + incomingText.slice(overlap), mode: 'delta' };
-  }
-
+  // Overlap detection removed: coincidental suffix-prefix matches (e.g. "...p" + "ptx")
+  // would incorrectly strip characters. Once snapshot detection above has failed,
+  // treat the incoming text as a pure delta append.
   return { text: previousText + incomingText, mode: 'delta' };
 };
 
@@ -1052,6 +1037,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         agentId: 'main',
         createdAt: now,
         updatedAt: now,
+        messagesOffset: 0,
+        totalMessages: messages.length,
       };
     } catch (error) {
       console.error('[OpenClawRuntime] fetchSessionByKey: failed to fetch history:', error);
@@ -1148,6 +1135,8 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         executionMode: 'local' as CoworkExecutionMode,
         activeSkillIds: [],
         messages,
+        messagesOffset: 0,
+        totalMessages: messages.length,
         createdAt: firstTimestamp,
         updatedAt: firstTimestamp,
       };

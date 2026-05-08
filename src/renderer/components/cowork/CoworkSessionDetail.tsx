@@ -6,11 +6,12 @@ import {
   PhotoIcon,
 } from '@heroicons/react/24/outline';
 import { FolderIcon } from '@heroicons/react/24/solid';
-import React, { useCallback, useEffect, useMemo,useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo,useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { getScheduledReminderDisplayText } from '../../../scheduledTask/reminderText';
+import { getArtifactTypeFromExtension, normalizeFilePathForDedup, parseCodeBlockArtifacts, parseFileLinksFromMessage, parseFilePathsFromText, parseToolArtifact } from '../../services/artifactParser';
 import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
 import { RootState } from '../../store';
@@ -21,12 +22,24 @@ import {
   selectLastMessageContent,
   selectRemoteManaged,
 } from '../../store/selectors/coworkSelectors';
+import {
+  addArtifact,
+  closePanel,
+  selectArtifact,
+  selectIsPanelOpen,
+  selectSessionArtifacts,
+  setPanelView,
+  togglePanel,
+} from '../../store/slices/artifactSlice';
 import { setActiveSkillIds } from '../../store/slices/skillSlice';
+import type { Artifact } from '../../types/artifact';
+import { PREVIEWABLE_ARTIFACT_TYPES } from '../../types/artifact';
 import type { CoworkImageAttachment,CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
 import type { Skill } from '../../types/skill';
 import { getCompactFolderName } from '../../utils/path';
 import { formatMessageTime, formatTokenCount } from '../../utils/tokenFormat';
 import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
+import { ArtifactPanel, ArtifactPreviewCard } from '../artifacts';
 import Modal from '../common/Modal';
 import ComposeIcon from '../icons/ComposeIcon';
 import EllipsisHorizontalIcon from '../icons/EllipsisHorizontalIcon';
@@ -294,6 +307,51 @@ const PushPinIcon: React.FC<React.SVGProps<SVGSVGElement> & { slashed?: boolean 
     {slashed && <path d="M5 5L19 19" />}
   </svg>
 );
+
+const ArtifactPanelIcon: React.FC<React.SVGProps<SVGSVGElement> & { open?: boolean }> = ({ open, ...props }) => {
+  const dividerX = open ? 10.5 : 12.5;
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="1.5" y="2" width="13" height="12" rx="2" />
+      <line x1={dividerX} y1="2" x2={dividerX} y2="14" />
+    </svg>
+  );
+};
+
+class ArtifactPanelErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onClose: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error) {
+    console.error('[ArtifactPanel] render error:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <aside className="w-[420px] shrink-0 border-l border-border bg-background flex flex-col h-full items-center justify-center p-4">
+          <p className="text-sm text-red-500 mb-2">Artifact panel error</p>
+          <pre className="text-xs text-muted whitespace-pre-wrap max-w-full overflow-auto mb-3">
+            {this.state.error?.message}
+          </pre>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose(); }}
+            className="px-3 py-1.5 text-xs rounded-lg bg-surface hover:bg-surface-hover text-foreground"
+          >
+            Close
+          </button>
+        </aside>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const formatUnknown = (value: unknown): string => {
   if (typeof value === 'string') {
@@ -1465,12 +1523,14 @@ const ThinkingBlock: React.FC<{
 
 export const AssistantTurnBlock: React.FC<{
   turn: ConversationTurn;
+  artifacts?: Artifact[];
   resolveLocalFilePath?: (href: string, text: string) => string | null;
   mapDisplayText?: (value: string) => string;
   showTypingIndicator?: boolean;
   showCopyButtons?: boolean;
 }> = ({
   turn,
+  artifacts,
   resolveLocalFilePath,
   mapDisplayText,
   showTypingIndicator = false,
@@ -1620,6 +1680,13 @@ export const AssistantTurnBlock: React.FC<{
               );
             })}
             {showTypingIndicator && <TypingDots />}
+            {artifacts && artifacts.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {artifacts.map(artifact => (
+                  <ArtifactPreviewCard key={artifact.id} artifact={artifact} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1650,6 +1717,9 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<CoworkPromptInputRef>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
+  const isLoadingMoreMessagesRef = useRef(false);
+  const prevScrollHeightRef = useRef<number | null>(null);
 
   // Clear lazy-render height cache when session changes
   const sessionId = currentSession?.id;
@@ -1707,6 +1777,202 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       renameInputRef.current?.select();
     });
   }, [isRenaming]);
+
+  // ─── Artifact detection ─────────────────────────────────────────────
+  const isPanelOpen = useSelector(selectIsPanelOpen);
+  const sessionArtifacts = useSelector((state: RootState) =>
+    sessionId ? selectSessionArtifacts(state, sessionId) : []
+  );
+
+  const loadedFileIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    dispatch(setPanelView('files'));
+    dispatch(selectArtifact(''));
+    loadedFileIdsRef.current = new Set();
+  }, [sessionId, dispatch]);
+
+  useEffect(() => {
+    if (!sessionId || !currentSession?.messages?.length) return;
+    if (isStreaming) return;
+
+    try {
+      const messages = currentSession.messages;
+      const detected: Artifact[] = [];
+      const seenFilePaths = new Set<string>();
+
+      for (const msg of messages) {
+        if (msg.type === 'assistant' && !msg.metadata?.isThinking && msg.content) {
+          const codeBlockArtifacts = parseCodeBlockArtifacts(msg.content, msg.id, sessionId);
+          detected.push(...codeBlockArtifacts);
+
+          const fileLinks = parseFileLinksFromMessage(msg.content, msg.id, sessionId);
+          for (const fl of fileLinks) {
+            const normalized = fl.filePath ? normalizeFilePathForDedup(fl.filePath) : '';
+            if (fl.filePath && !seenFilePaths.has(normalized)) {
+              seenFilePaths.add(normalized);
+              detected.push(fl);
+            }
+          }
+
+          const pathArtifacts = parseFilePathsFromText(msg.content, msg.id, sessionId);
+          for (const pa of pathArtifacts) {
+            const normalized = pa.filePath ? normalizeFilePathForDedup(pa.filePath) : '';
+            if (pa.filePath && !seenFilePaths.has(normalized)) {
+              seenFilePaths.add(normalized);
+              detected.push(pa);
+            }
+          }
+        }
+
+        if (msg.type === 'tool_result' && msg.content) {
+          const pathArtifacts = parseFilePathsFromText(msg.content, msg.id, sessionId, 'artifact-toolresult');
+          for (const pa of pathArtifacts) {
+            const normalized = pa.filePath ? normalizeFilePathForDedup(pa.filePath) : '';
+            if (pa.filePath && !seenFilePaths.has(normalized)) {
+              seenFilePaths.add(normalized);
+              detected.push(pa);
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        if (msg.type === 'tool_use') {
+          const toolUseId = msg.metadata?.toolUseId;
+          const toolResult = toolUseId
+            ? messages.find(m => m.type === 'tool_result' && m.metadata?.toolUseId === toolUseId)
+            : messages[i + 1]?.type === 'tool_result' ? messages[i + 1] : undefined;
+          const toolArtifact = parseToolArtifact(msg, toolResult, sessionId);
+          if (toolArtifact && toolArtifact.filePath) {
+            const normalized = normalizeFilePathForDedup(toolArtifact.filePath);
+            if (!seenFilePaths.has(normalized)) {
+              seenFilePaths.add(normalized);
+              detected.push(toolArtifact);
+            }
+          } else if (toolArtifact && !toolArtifact.filePath) {
+            detected.push(toolArtifact);
+          }
+        }
+      }
+
+      for (const a of detected) {
+        dispatch(addArtifact({ sessionId, artifact: a }));
+      }
+
+      const cwd = currentSession.cwd;
+      const toLoad = detected.filter(a => a.filePath && !loadedFileIdsRef.current.has(a.id));
+      if (toLoad.length === 0) return;
+
+      const loadFiles = async () => {
+        for (const artifact of toLoad) {
+          let rawPath = artifact.filePath!;
+          if (rawPath.startsWith('file:///')) {
+            rawPath = rawPath.slice(7);
+          } else if (rawPath.startsWith('file://')) {
+            rawPath = rawPath.slice(7);
+          } else if (rawPath.startsWith('file:/')) {
+            rawPath = rawPath.slice(5);
+          }
+          // Strip leading / before Windows drive letter
+          if (/^\/[A-Za-z]:/.test(rawPath)) {
+            rawPath = rawPath.slice(1);
+          }
+          const absPath = rawPath.startsWith('/')
+            ? rawPath
+            : (/^[A-Za-z]:/.test(rawPath) ? rawPath : `${cwd}/${rawPath}`);
+          try {
+            const result = await window.electron.dialog.readFileAsDataUrl(absPath);
+            if (result?.success && result.dataUrl) {
+              const isTextType = artifact.type !== 'image' && artifact.type !== 'document';
+              let content = result.dataUrl;
+              if (isTextType) {
+                try {
+                  const base64 = result.dataUrl.split(',')[1] || '';
+                  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+                  content = new TextDecoder('utf-8').decode(bytes);
+                } catch {
+                  content = result.dataUrl;
+                }
+              }
+              loadedFileIdsRef.current.add(artifact.id);
+              dispatch(addArtifact({
+                sessionId,
+                artifact: { ...artifact, content, filePath: absPath },
+              }));
+            }
+          } catch {
+            // skip unreadable files
+          }
+        }
+      };
+      loadFiles();
+    } catch (err) {
+      console.error('[ArtifactDetection] failed:', err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- uses messagesLength as stable proxy for currentSession.messages
+  }, [sessionId, messagesLength, isStreaming, dispatch]);
+
+  // Intercept clicks on artifact-compatible file links → open in panel
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !sessionId) return;
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a');
+      if (!anchor) return;
+
+      const href = anchor.getAttribute('href') || '';
+      if (!href.startsWith('file://')) return;
+
+      let filePath: string;
+      try {
+        filePath = decodeURIComponent(href.replace(/^file:\/\//, ''));
+      } catch {
+        filePath = href.replace(/^file:\/\//, '');
+      }
+      // Strip leading / before Windows drive letter
+      if (/^\/[A-Za-z]:/.test(filePath)) {
+        filePath = filePath.slice(1);
+      }
+
+      const lastDot = filePath.lastIndexOf('.');
+      if (lastDot === -1) return;
+      const ext = filePath.slice(lastDot).toLowerCase();
+      if (!getArtifactTypeFromExtension(ext)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const normalizedClick = normalizeFilePathForDedup(filePath);
+      const existing = sessionArtifacts.find(a => a.filePath && normalizeFilePathForDedup(a.filePath) === normalizedClick);
+      if (existing) {
+        dispatch(selectArtifact(existing.id));
+      } else {
+        const type = getArtifactTypeFromExtension(ext)!;
+        const fileName = filePath.slice(Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1);
+        const newArtifact: Artifact = {
+          id: `artifact-click-${Date.now()}`,
+          messageId: '',
+          sessionId,
+          type,
+          title: fileName,
+          content: '',
+          fileName,
+          filePath,
+          source: 'tool',
+          createdAt: Date.now(),
+        };
+        dispatch(addArtifact({ sessionId, artifact: newArtifact }));
+        dispatch(selectArtifact(newArtifact.id));
+      }
+    };
+
+    container.addEventListener('click', handleLinkClick, true);
+    return () => container.removeEventListener('click', handleLinkClick, true);
+  }, [sessionId, sessionArtifacts, dispatch]);
+  // ─── End artifact detection ─────────────────────────────────────────
 
   // Cleanup nav timers on unmount
   useEffect(() => {
@@ -2135,6 +2401,23 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     setIsScrollable((prev) => (prev === scrollable ? prev : scrollable));
     if (!scrollable) return;
 
+    // Load older messages when scrolled near the top
+    if (container.scrollTop <= 80 && !isLoadingMoreMessagesRef.current) {
+      const sessionId = currentSession?.id;
+      const offset = currentSession?.messagesOffset ?? 0;
+      if (sessionId && offset > 0) {
+        isLoadingMoreMessagesRef.current = true;
+        setIsLoadingMoreMessages(true);
+        prevScrollHeightRef.current = container.scrollHeight;
+        coworkService.loadMoreMessages(sessionId).catch(() => {
+          prevScrollHeightRef.current = null;
+          isLoadingMoreMessagesRef.current = false;
+          setIsLoadingMoreMessages(false);
+        });
+      }
+    }
+
+
     // Skip index recalculation during programmatic navigation
     if (isNavigatingRef.current) return;
 
@@ -2184,7 +2467,37 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       currentRailIndexRef.current = railIdx;
       setCurrentRailIndex(railIdx);
     }
-  }, []);
+  }, [currentSession?.id, currentSession?.messagesOffset]);
+
+  // Auto-load older messages if content doesn't fill the container (no scrollbar = onScroll never fires)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || isLoadingMoreMessagesRef.current) return;
+    const sessionId = currentSession?.id;
+    const offset = currentSession?.messagesOffset ?? 0;
+    if (!sessionId || offset <= 0) return;
+    if (container.scrollHeight <= container.clientHeight) {
+      isLoadingMoreMessagesRef.current = true;
+      setIsLoadingMoreMessages(true);
+      prevScrollHeightRef.current = container.scrollHeight;
+      coworkService.loadMoreMessages(sessionId).catch(() => {
+        prevScrollHeightRef.current = null;
+        isLoadingMoreMessagesRef.current = false;
+        setIsLoadingMoreMessages(false);
+      });
+    }
+  }, [currentSession?.id, currentSession?.messagesOffset, currentSession?.messages.length]);
+
+  // Restore scroll position synchronously before browser paint when messages are prepended
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || prevScrollHeightRef.current === null) return;
+    const newScrollHeight = container.scrollHeight;
+    container.scrollTop += newScrollHeight - prevScrollHeightRef.current;
+    prevScrollHeightRef.current = null;
+    isLoadingMoreMessagesRef.current = false;
+    setIsLoadingMoreMessages(false);
+  }, [currentSession?.messages.length]);
 
   const navigateToRailItem = useCallback((railIndex: number) => {
     if (railIndex < 0 || railIndex >= railItemCountRef.current) return;
@@ -2395,6 +2708,21 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       const userRailIdx = turn.userMessage ? railCounter++ : -1;
       const asstRailIdx = asstContent ? railCounter++ : -1;
 
+      const turnMessageIds = new Set<string>();
+      for (const item of turn.assistantItems) {
+        if (item.type === 'assistant' || item.type === 'system' || item.type === 'tool_result') {
+          turnMessageIds.add(item.message.id);
+        } else if (item.type === 'tool_group') {
+          turnMessageIds.add(item.group.toolUse.id);
+          if (item.group.toolResult) {
+            turnMessageIds.add(item.group.toolResult.id);
+          }
+        }
+      }
+      const turnArtifacts = sessionArtifacts.filter(
+        a => turnMessageIds.has(a.messageId) && PREVIEWABLE_ARTIFACT_TYPES.has(a.type)
+      );
+
       return (
         <LazyRenderTurn key={turn.id} turnId={turn.id} alwaysRender={alwaysRender} data-turn-index={index}>
           {turn.userMessage && (
@@ -2406,6 +2734,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
             <div data-export-role="assistant-block" {...(asstRailIdx >= 0 ? { 'data-rail-index': asstRailIdx } : undefined)}>
               <AssistantTurnBlock
                 turn={turn}
+                artifacts={turnArtifacts}
                 resolveLocalFilePath={resolveLocalFilePath}
                 mapDisplayText={mapDisplayText}
                 showTypingIndicator={showTypingIndicator}
@@ -2419,8 +2748,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   };
 
   return (
-    <div ref={detailRootRef} className="flex-1 flex flex-col bg-background h-full">
-      {/* Header */}
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      {/* Header — spans full width */}
       <div className="draggable flex h-12 items-center justify-between px-4 border-b border-border bg-surface shrink-0">
         {/* Left side: Toggle buttons (when collapsed) + Title */}
         <div className="flex h-full items-center gap-2 min-w-0">
@@ -2467,7 +2796,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
           )}
         </div>
 
-        {/* Right side: Folder + Menu */}
+        {/* Right side: Folder + Menu + Artifact toggle */}
         <div className="non-draggable flex items-center gap-1">
           {/* Folder button */}
           <button
@@ -2492,6 +2821,17 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
           >
             <EllipsisHorizontalIcon className="h-5 w-5" />
           </button>
+
+          {/* Artifact panel toggle */}
+          <button
+            type="button"
+            onClick={() => dispatch(togglePanel())}
+            className="relative h-8 w-8 inline-flex items-center justify-center rounded-lg text-secondary hover:bg-surface-raised transition-colors"
+            aria-label={i18nService.t('artifactPanelToggle')}
+          >
+            <ArtifactPanelIcon className="h-4 w-4" open={isPanelOpen} />
+          </button>
+
           <WindowTitleBar inline className="ml-1" />
         </div>
       </div>
@@ -2635,12 +2975,21 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
             </div>
         </Modal>
       )}
+
+      {/* Content row: chat + artifact panel */}
+      <div className="flex-1 flex overflow-hidden">
+      <div ref={detailRootRef} className="flex-1 flex flex-col bg-background h-full" style={{ minWidth: 480 }}>
       <div className="relative flex-1 min-h-0">
         <div
           ref={scrollContainerRef}
           onScroll={handleMessagesScroll}
           className={`h-full min-h-0 overflow-y-auto pt-3 ${turns.length > 1 && isScrollable ? 'pr-8' : 'pr-3'}`}
         >
+          {isLoadingMoreMessages && (
+            <div className="py-2 text-center text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+              {i18nService.t('loading')}
+            </div>
+          )}
           {renderConversationTurns()}
           <div className="h-20" />
         </div>
@@ -2877,6 +3226,13 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
           {i18nService.t('aiGeneratedDisclaimer')}
         </p>
       </div>
+    </div>
+    {isPanelOpen && (
+      <ArtifactPanelErrorBoundary onClose={() => dispatch(closePanel())}>
+        <ArtifactPanel artifacts={sessionArtifacts} />
+      </ArtifactPanelErrorBoundary>
+    )}
+    </div>
     </div>
   );
 };

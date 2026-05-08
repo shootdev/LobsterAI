@@ -9,6 +9,7 @@ import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
 import { migrateScheduledTaskRunsToOpenclaw, migrateScheduledTasksToOpenclaw } from '../scheduledTask/migrate';
 import { AppUpdateIpc } from '../shared/appUpdate/constants';
+import { COWORK_MESSAGE_PAGE_SIZE, COWORK_SESSION_PAGE_SIZE } from '../shared/cowork/constants';
 import { PlatformRegistry } from '../shared/platform';
 import { ProviderName } from '../shared/providers';
 import { AgentManager } from './agentManager';
@@ -1010,6 +1011,19 @@ const getAgentManager = () => {
   return agentManager;
 };
 
+const resolveAgentDefaultWorkingDirectory = (agentId?: string): string => {
+  const resolvedAgentId = agentId?.trim() || 'main';
+  const agentWorkingDirectory = getAgentManager().getAgent(resolvedAgentId)?.workingDirectory?.trim();
+  if (agentWorkingDirectory) return agentWorkingDirectory;
+  return getCoworkStore().getConfig().workingDirectory.trim();
+};
+
+const resolveSessionWorkingDirectory = (options: { cwd?: string; agentId?: string }): string => {
+  const explicitWorkingDirectory = options.cwd?.trim();
+  if (explicitWorkingDirectory) return explicitWorkingDirectory;
+  return resolveAgentDefaultWorkingDirectory(options.agentId);
+};
+
 const isLobsteraiServerModelRef = (modelRef: string): boolean => {
   const normalized = modelRef.trim();
   if (!normalized) return false;
@@ -1418,7 +1432,7 @@ const getCoworkEngineRouter = () => {
           const channelSessionSync = new OpenClawChannelSessionSync({
             coworkStore: getCoworkStore(),
             imStore,
-            getDefaultCwd: () => getCoworkStore().getConfig().workingDirectory || os.homedir(),
+            getDefaultCwd: (agentId?: string) => resolveAgentDefaultWorkingDirectory(agentId) || os.homedir(),
             resolveJobName: (jobId) => getCronJobService().getJobNameSync(jobId),
           });
           openClawRuntimeAdapter.setChannelSessionSync(channelSessionSync);
@@ -2179,6 +2193,12 @@ if (!gotTheLock) {
     }
   });
 
+  ipcMain.handle('app:relaunch', () => {
+    console.log('[Main] app:relaunch requested, scheduling restart...');
+    app.relaunch();
+    app.quit();
+  });
+
   // Window control IPC handlers
   ipcMain.on('window-minimize', () => {
     mainWindow?.minimize();
@@ -2812,9 +2832,12 @@ if (!gotTheLock) {
       const systemPrompt = mergeCoworkSystemPrompt(
         options.systemPrompt ?? config.systemPrompt,
       );
-      const selectedWorkspaceRoot = (options.cwd || config.workingDirectory || '').trim();
+      const selectedTaskDirectory = resolveSessionWorkingDirectory({
+        cwd: options.cwd,
+        agentId: options.agentId,
+      });
 
-      if (!selectedWorkspaceRoot) {
+      if (!selectedTaskDirectory) {
         return {
           success: false,
           error: 'Please select a task folder before submitting.',
@@ -2826,7 +2849,7 @@ if (!gotTheLock) {
         t('coworkDefaultSessionTitle')
       );
       const title = options.title?.trim() || fallbackTitle;
-      const taskWorkingDirectory = resolveTaskWorkingDirectory(selectedWorkspaceRoot);
+      const taskWorkingDirectory = resolveTaskWorkingDirectory(selectedTaskDirectory);
 
       const session = coworkStoreInstance.createSession(
         title,
@@ -2878,7 +2901,7 @@ if (!gotTheLock) {
         skipInitialUserMessage: true,
         systemPrompt,
         skillIds: options.activeSkillIds,
-        workspaceRoot: selectedWorkspaceRoot,
+        workspaceRoot: taskWorkingDirectory,
         confirmationMode: 'modal',
         imageAttachments: options.imageAttachments,
         agentId: options.agentId,
@@ -3101,14 +3124,34 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('cowork:session:list', async (_event, agentId?: string) => {
+  ipcMain.handle('cowork:session:list', async (_event, options?: { limit?: number; offset?: number; agentId?: string }) => {
     try {
-      const sessions = getCoworkStore().listSessions(agentId);
-      return { success: true, sessions };
+      const limit = options?.limit ?? COWORK_SESSION_PAGE_SIZE;
+      const offset = options?.offset ?? 0;
+      const agentId = options?.agentId;
+      const store = getCoworkStore();
+      const sessions = store.listSessions(limit, offset, agentId);
+      const total = store.countSessions(agentId);
+      return { success: true, sessions, hasMore: offset + sessions.length < total };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to list sessions',
+      };
+    }
+  });
+
+  ipcMain.handle('cowork:session:getMessages', async (_event, options: { sessionId: string; limit?: number; offset?: number }) => {
+    try {
+      const { sessionId, limit = COWORK_MESSAGE_PAGE_SIZE, offset = 0 } = options;
+      const store = getCoworkStore();
+      const total = store.countSessionMessages(sessionId);
+      const messages = store.getPagedSessionMessages(sessionId, limit, offset);
+      return { success: true, messages, offset, total };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get session messages',
       };
     }
   });
@@ -4940,6 +4983,43 @@ if (!gotTheLock) {
     }
   );
 
+  ipcMain.handle(
+    'dialog:generateThumbnail',
+    async (_event, filePath?: string): Promise<{ success: boolean; dataUrl?: string; error?: string }> => {
+      try {
+        if (typeof filePath !== 'string' || !filePath.trim()) {
+          return { success: false, error: 'Missing file path' };
+        }
+        const resolvedPath = path.resolve(filePath.trim());
+        const stat = await fs.promises.stat(resolvedPath);
+        if (!stat.isFile()) {
+          return { success: false, error: 'Not a file' };
+        }
+        if (process.platform !== 'darwin') {
+          return { success: false, error: 'Thumbnail generation only supported on macOS' };
+        }
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+        const tmpDir = path.join(app.getPath('temp'), 'lobsterai-thumbnails');
+        await fs.promises.mkdir(tmpDir, { recursive: true });
+        const baseName = path.basename(resolvedPath);
+        const outputFile = path.join(tmpDir, `${baseName}.png`);
+        try { await fs.promises.unlink(outputFile); } catch { /* ignore */ }
+        await execFileAsync('qlmanage', ['-t', '-s', '1200', '-o', tmpDir, resolvedPath]);
+        const thumbBuffer = await fs.promises.readFile(outputFile);
+        const base64 = thumbBuffer.toString('base64');
+        try { await fs.promises.unlink(outputFile); } catch { /* ignore */ }
+        return { success: true, dataUrl: `data:image/png;base64,${base64}` };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to generate thumbnail',
+        };
+      }
+    }
+  );
+
   // Shell handlers - 打开文件/文件夹
   ipcMain.handle('shell:openPath', async (_event, filePath: string) => {
     try {
@@ -4968,6 +5048,19 @@ if (!gotTheLock) {
   ipcMain.handle('shell:openExternal', async (_event, url: string) => {
     try {
       await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('shell:openHtmlInBrowser', async (_event, htmlContent: string) => {
+    try {
+      const tmpDir = path.join(os.tmpdir(), 'lobsterai-preview');
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const tmpFile = path.join(tmpDir, `preview-${Date.now()}.html`);
+      fs.writeFileSync(tmpFile, htmlContent, 'utf-8');
+      await shell.openExternal(`file://${tmpFile}`);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -5208,11 +5301,29 @@ if (!gotTheLock) {
     }
   };
 
+  const isArtifactSandboxUrl = (url: string): boolean => {
+    try {
+      const pathname = new URL(url).pathname;
+      return pathname.endsWith('/artifact-react-sandbox.html')
+        || pathname.includes('/vendor/react.production.min.js')
+        || pathname.includes('/vendor/react-dom.production.min.js')
+        || pathname.includes('/vendor/babel.min.js');
+    } catch {
+      return false;
+    }
+  };
+
   // 设置 Content Security Policy
   const setContentSecurityPolicy = () => {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       // 跳过企微授权页面，让其使用自身的 CSP（否则外部脚本被阻止导致空白页）
       if (isWecomAuthUrl(details.url)) {
+        callback({ responseHeaders: details.responseHeaders });
+        return;
+      }
+
+      // 跳过 artifact 沙箱及其 vendor 脚本的 CSP（iframe sandbox="allow-scripts" 隔离）
+      if (isArtifactSandboxUrl(details.url)) {
         callback({ responseHeaders: details.responseHeaders });
         return;
       }
@@ -5228,7 +5339,7 @@ if (!gotTheLock) {
         "font-src 'self' data:",
         "media-src 'self'",
         "worker-src 'self' blob:",
-        "frame-src 'self'"
+        "frame-src 'self' file:"
       ];
 
       callback({
@@ -5402,7 +5513,8 @@ if (!gotTheLock) {
     }
 
     // 添加错误处理
-    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return;
       console.error('Page failed to load:', errorCode, errorDescription);
       // 如果加载失败，尝试重新加载
       if (isDev) {
