@@ -343,6 +343,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           }`}
         />
         <div
+          className={`pointer-events-none absolute inset-x-0 top-[68px] z-10 h-10 bg-gradient-to-b from-surface-raised to-transparent transition-opacity duration-150 ${
+            agentScrollEdges.top ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        <div
           className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-surface-raised to-transparent transition-opacity duration-150 ${
             agentScrollEdges.bottom ? 'opacity-100' : 'opacity-0'
           }`}

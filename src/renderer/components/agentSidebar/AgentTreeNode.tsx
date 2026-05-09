@@ -245,9 +245,6 @@ const AgentTreeNode: React.FC<AgentTreeNodeProps> = ({
             {agentName}
           </span>
         </button>
-        {shouldRenderTasks && (
-          <div className="pointer-events-none absolute inset-x-0 -bottom-9 h-9 bg-gradient-to-b from-surface-raised to-transparent" />
-        )}
 
         <div
           className={`absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity ${
