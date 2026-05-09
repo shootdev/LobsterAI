@@ -1,5 +1,5 @@
 export const AgentAvatarIconFormat = {
-  Designed: 'agent-avatar',
+  Svg: 'agent-avatar-svg',
 } as const;
 
 export type AgentAvatarIconFormat = typeof AgentAvatarIconFormat[keyof typeof AgentAvatarIconFormat];
@@ -8,7 +8,62 @@ export const AgentAvatarIconSeparator = {
   Value: ':',
 } as const;
 
-export const AgentAvatarColor = {
+export const AgentAvatarSvg = {
+  Lobster: 'lobster',
+  Code: 'code',
+  Repair: 'repair',
+  Briefcase: 'briefcase',
+  ShoppingCart: 'shopping-cart',
+  Data: 'data',
+  Document: 'document',
+  Folder: 'folder',
+  Tag: 'tag',
+  Brain: 'brain',
+  GraduationCap: 'graduation-cap',
+  Books: 'books',
+  Experiment: 'experiment',
+  Diagnosis: 'diagnosis',
+  Scales: 'scales',
+  Translation: 'translation',
+  TranslationAlt: 'translation-alt',
+  Creation: 'creation',
+  Artboard: 'artboard',
+  Music: 'music',
+  Entertainment: 'entertainment',
+  Headphones: 'headphones',
+  Inspiration: 'inspiration',
+  Lightning: 'lightning',
+  Travel: 'travel',
+  Fitness: 'fitness',
+  Meditation: 'meditation',
+  Heart: 'heart',
+  PottedPlant: 'potted-plant',
+  Pet: 'pet',
+} as const;
+
+export type AgentAvatarSvg = typeof AgentAvatarSvg[keyof typeof AgentAvatarSvg];
+
+export interface DesignedAgentAvatar {
+  svg: AgentAvatarSvg;
+}
+
+const AGENT_AVATAR_PART_COUNT = 2;
+
+const AGENT_AVATAR_SVGS = new Set<string>(Object.values(AgentAvatarSvg));
+
+export const DefaultAgentAvatar = {
+  svg: AgentAvatarSvg.Lobster,
+} as const satisfies DesignedAgentAvatar;
+
+export const isAgentAvatarSvg = (value: string): value is AgentAvatarSvg => {
+  return AGENT_AVATAR_SVGS.has(value);
+};
+
+const LegacyAgentAvatarIconFormat = {
+  Designed: 'agent-avatar',
+} as const;
+
+const LegacyAgentAvatarColor = {
   Ink: 'ink',
   Coral: 'coral',
   Orange: 'orange',
@@ -19,9 +74,7 @@ export const AgentAvatarColor = {
   Pink: 'pink',
 } as const;
 
-export type AgentAvatarColor = typeof AgentAvatarColor[keyof typeof AgentAvatarColor];
-
-export const AgentAvatarGlyph = {
+const LegacyAgentAvatarGlyph = {
   Folder: 'folder',
   Finance: 'finance',
   Book: 'book',
@@ -54,53 +107,79 @@ export const AgentAvatarGlyph = {
   Launch: 'launch',
 } as const;
 
-export type AgentAvatarGlyph = typeof AgentAvatarGlyph[keyof typeof AgentAvatarGlyph];
-
-export interface DesignedAgentAvatar {
-  color: AgentAvatarColor;
-  glyph: AgentAvatarGlyph;
-}
-
-const AGENT_AVATAR_PART_COUNT = 3;
-
-const AGENT_AVATAR_COLORS = new Set<string>(Object.values(AgentAvatarColor));
-const AGENT_AVATAR_GLYPHS = new Set<string>(Object.values(AgentAvatarGlyph));
-
-export const DefaultAgentAvatar = {
-  color: AgentAvatarColor.Ink,
-  glyph: AgentAvatarGlyph.Folder,
-} as const satisfies DesignedAgentAvatar;
-
-export const isAgentAvatarColor = (value: string): value is AgentAvatarColor => {
-  return AGENT_AVATAR_COLORS.has(value);
-};
-
-export const isAgentAvatarGlyph = (value: string): value is AgentAvatarGlyph => {
-  return AGENT_AVATAR_GLYPHS.has(value);
+const LEGACY_AGENT_AVATAR_PART_COUNT = 3;
+const LEGACY_AGENT_AVATAR_COLORS = new Set<string>(Object.values(LegacyAgentAvatarColor));
+const LEGACY_AGENT_AVATAR_GLYPH_TO_SVG: Record<string, AgentAvatarSvg> = {
+  [LegacyAgentAvatarGlyph.Folder]: AgentAvatarSvg.Folder,
+  [LegacyAgentAvatarGlyph.Finance]: AgentAvatarSvg.Data,
+  [LegacyAgentAvatarGlyph.Book]: AgentAvatarSvg.Books,
+  [LegacyAgentAvatarGlyph.Education]: AgentAvatarSvg.GraduationCap,
+  [LegacyAgentAvatarGlyph.Writing]: AgentAvatarSvg.Creation,
+  [LegacyAgentAvatarGlyph.Design]: AgentAvatarSvg.Artboard,
+  [LegacyAgentAvatarGlyph.Code]: AgentAvatarSvg.Code,
+  [LegacyAgentAvatarGlyph.Terminal]: AgentAvatarSvg.Code,
+  [LegacyAgentAvatarGlyph.Music]: AgentAvatarSvg.Music,
+  [LegacyAgentAvatarGlyph.Media]: AgentAvatarSvg.Entertainment,
+  [LegacyAgentAvatarGlyph.Art]: AgentAvatarSvg.Artboard,
+  [LegacyAgentAvatarGlyph.Operations]: AgentAvatarSvg.Repair,
+  [LegacyAgentAvatarGlyph.Research]: AgentAvatarSvg.Brain,
+  [LegacyAgentAvatarGlyph.Automation]: AgentAvatarSvg.Lightning,
+  [LegacyAgentAvatarGlyph.Growth]: AgentAvatarSvg.Inspiration,
+  [LegacyAgentAvatarGlyph.Business]: AgentAvatarSvg.Briefcase,
+  [LegacyAgentAvatarGlyph.Analytics]: AgentAvatarSvg.Data,
+  [LegacyAgentAvatarGlyph.Support]: AgentAvatarSvg.Headphones,
+  [LegacyAgentAvatarGlyph.Training]: AgentAvatarSvg.GraduationCap,
+  [LegacyAgentAvatarGlyph.Notes]: AgentAvatarSvg.Document,
+  [LegacyAgentAvatarGlyph.Legal]: AgentAvatarSvg.Scales,
+  [LegacyAgentAvatarGlyph.Voice]: AgentAvatarSvg.Headphones,
+  [LegacyAgentAvatarGlyph.Travel]: AgentAvatarSvg.Travel,
+  [LegacyAgentAvatarGlyph.Global]: AgentAvatarSvg.Translation,
+  [LegacyAgentAvatarGlyph.Tools]: AgentAvatarSvg.Repair,
+  [LegacyAgentAvatarGlyph.Science]: AgentAvatarSvg.Experiment,
+  [LegacyAgentAvatarGlyph.Memory]: AgentAvatarSvg.Brain,
+  [LegacyAgentAvatarGlyph.Care]: AgentAvatarSvg.Heart,
+  [LegacyAgentAvatarGlyph.Gift]: AgentAvatarSvg.Tag,
+  [LegacyAgentAvatarGlyph.Launch]: AgentAvatarSvg.Lightning,
 };
 
 export const encodeAgentAvatarIcon = (avatar: DesignedAgentAvatar): string => {
   return [
-    AgentAvatarIconFormat.Designed,
-    avatar.color,
-    avatar.glyph,
+    AgentAvatarIconFormat.Svg,
+    avatar.svg,
   ].join(AgentAvatarIconSeparator.Value);
 };
 
 export const DefaultAgentAvatarIcon = encodeAgentAvatarIcon(DefaultAgentAvatar);
+
+const parseLegacyAgentAvatarIcon = (parts: string[]): DesignedAgentAvatar | null => {
+  if (parts.length !== LEGACY_AGENT_AVATAR_PART_COUNT) return null;
+
+  const [format, color, glyph] = parts;
+  if (format !== LegacyAgentAvatarIconFormat.Designed) return null;
+  if (!LEGACY_AGENT_AVATAR_COLORS.has(color)) return null;
+
+  const svg = LEGACY_AGENT_AVATAR_GLYPH_TO_SVG[glyph];
+  if (!svg) return null;
+
+  return { svg };
+};
 
 export const parseAgentAvatarIcon = (value: string | null | undefined): DesignedAgentAvatar | null => {
   const normalized = value?.trim() ?? '';
   if (!normalized) return null;
 
   const parts = normalized.split(AgentAvatarIconSeparator.Value);
+  if (parts[0] === LegacyAgentAvatarIconFormat.Designed) {
+    return parseLegacyAgentAvatarIcon(parts);
+  }
+
   if (parts.length !== AGENT_AVATAR_PART_COUNT) return null;
 
-  const [format, color, glyph] = parts;
-  if (format !== AgentAvatarIconFormat.Designed) return null;
-  if (!isAgentAvatarColor(color) || !isAgentAvatarGlyph(glyph)) return null;
+  const [format, svg] = parts;
+  if (format !== AgentAvatarIconFormat.Svg) return null;
+  if (!isAgentAvatarSvg(svg)) return null;
 
-  return { color, glyph };
+  return { svg };
 };
 
 export const isDesignedAgentAvatarIcon = (value: string | null | undefined): boolean => {
@@ -109,6 +188,7 @@ export const isDesignedAgentAvatarIcon = (value: string | null | undefined): boo
 
 export const normalizeAgentAvatarIcon = (value: string | null | undefined): string => {
   const normalized = value?.trim() ?? '';
-  if (isDesignedAgentAvatarIcon(normalized)) return normalized;
+  const avatar = parseAgentAvatarIcon(normalized);
+  if (avatar) return encodeAgentAvatarIcon(avatar);
   return DefaultAgentAvatarIcon;
 };

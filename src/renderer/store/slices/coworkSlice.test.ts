@@ -75,6 +75,7 @@ test('updateCurrentSessionModelOverride only patches the active session', () => 
   );
 
   expect(activeState.currentSession?.modelOverride).toBe('lobsterai-server/qwen3.6-plus-YoudaoInner');
+  expect(activeState.currentSession?.updatedAt).toBe(1);
 
   const ignoredState = coworkReducer(
     activeState,

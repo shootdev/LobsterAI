@@ -310,7 +310,6 @@ const coworkSlice = createSlice({
       const { sessionId, modelOverride } = action.payload;
       if (state.currentSession?.id !== sessionId) return;
       state.currentSession.modelOverride = modelOverride;
-      state.currentSession.updatedAt = Date.now();
     },
 
     enqueuePendingPermission(state, action: PayloadAction<CoworkPermissionRequest>) {

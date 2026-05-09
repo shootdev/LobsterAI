@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { AgentAvatarColor, AgentAvatarGlyph, DefaultAgentAvatarIcon, DefaultAgentProfile, encodeAgentAvatarIcon } from '../shared/agent';
+import { AgentAvatarSvg, DefaultAgentAvatarIcon, DefaultAgentProfile, encodeAgentAvatarIcon } from '../shared/agent';
 
 vi.mock('electron', () => ({
   app: {
@@ -128,13 +128,12 @@ test('upgrades legacy default agent name during migration', async () => {
   store.close();
 });
 
-test('migrates legacy agent icons to the default designed avatar', async () => {
+test('migrates legacy agent icons to the default svg avatar', async () => {
   const userDataPath = createTempUserDataPath();
   createLegacyDatabase(userDataPath);
 
   const designedIcon = encodeAgentAvatarIcon({
-    color: AgentAvatarColor.Blue,
-    glyph: AgentAvatarGlyph.Code,
+    svg: AgentAvatarSvg.Code,
   });
   const db = new Database(path.join(userDataPath, DB_FILENAME));
   const now = Date.now();
