@@ -4121,9 +4121,9 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('im:weixin:qr-login-wait', async (_event, accountId?: string) => {
+  ipcMain.handle('im:weixin:qr-login-wait', async (_event, sessionKey?: string) => {
     try {
-      const result = await getIMGatewayManager().weixinQrLoginWait(accountId);
+      const result = await getIMGatewayManager().weixinQrLoginWait(sessionKey);
       return { success: true, ...result };
     } catch (error) {
       return { success: false, connected: false, message: error instanceof Error ? error.message : 'Weixin QR login failed' };
@@ -4200,7 +4200,7 @@ if (!gotTheLock) {
 
   ipcMain.handle('im:status:get', async () => {
     try {
-      const status = getIMGatewayManager().getStatus();
+      const status = await getIMGatewayManager().getStatusWithOpenClawRuntime();
       return { success: true, status };
     } catch (error) {
       return {
