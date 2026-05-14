@@ -1,15 +1,12 @@
+import { type ApiFormat,type ProviderConfig,ProviderRegistry } from '@shared/providers';
+
 import { AppConfig, CONFIG_KEYS, defaultConfig, isCustomProvider } from '../config';
 import { localStore } from './store';
 
-const getFixedProviderApiFormat = (providerKey: string): 'anthropic' | 'openai' | 'gemini' | null => {
-  if (providerKey === 'openai' || providerKey === 'stepfun' || providerKey === 'youdaozhiyun' || providerKey === 'github-copilot') {
-    return 'openai';
-  }
-  if (providerKey === 'anthropic') {
-    return 'anthropic';
-  }
-  if (providerKey === 'gemini') {
-    return 'gemini';
+const getFixedProviderApiFormat = (providerKey: string): ApiFormat | null => {
+  const def = ProviderRegistry.get(providerKey);
+  if (def && !def.switchableBaseUrls) {
+    return def.defaultApiFormat;
   }
   return null;
 };
@@ -56,6 +53,18 @@ const normalizeProviderApiFormat = (providerKey: string, apiFormat: unknown): 'a
   return 'anthropic';
 };
 
+const normalizeProviderModels = (
+  providerKey: string,
+  models: ProviderConfig['models'],
+): ProviderConfig['models'] => models?.map(model => ({
+  ...model,
+  supportsImage: ProviderRegistry.resolveModelSupportsImage(
+    providerKey,
+    model.id,
+    model.supportsImage,
+  ),
+}));
+
 const normalizeProvidersConfig = (providers: AppConfig['providers']): AppConfig['providers'] => {
   if (!providers) {
     return providers;
@@ -68,6 +77,7 @@ const normalizeProvidersConfig = (providers: AppConfig['providers']): AppConfig[
         ...providerConfig,
         baseUrl: normalizeProviderBaseUrl(providerKey, providerConfig.baseUrl),
         apiFormat: normalizeProviderApiFormat(providerKey, providerConfig.apiFormat),
+        models: normalizeProviderModels(providerKey, providerConfig.models),
       },
     ])
   ) as AppConfig['providers'];
@@ -84,7 +94,7 @@ const migrateCustomProviders = (config: AppConfig): AppConfig => {
   if ('custom' in providers && !isCustomProvider('custom')) {
     const legacyCustom = providers['custom'];
     if (legacyCustom) {
-      const updatedProviders = { ...providers } as Record<string, any>;
+      const updatedProviders = { ...providers } as Record<string, unknown>;
       updatedProviders['custom_0'] = { ...legacyCustom };
       delete updatedProviders['custom'];
       return {
@@ -111,6 +121,19 @@ const REMOVED_PROVIDER_MODELS: Record<string, string[]> = {
 // so the models follow normal user-editable behavior (same as other models).
 // position: 'start' inserts at the beginning, 'end' appends at the end.
 const ADDED_PROVIDER_MODELS: Record<string, { models: Array<{ id: string; name: string; supportsImage?: boolean }>; position: 'start' | 'end' }> = {
+  deepseek: {
+    models: [
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', supportsImage: false },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', supportsImage: false },
+    ],
+    position: 'start',
+  },
+  moonshot: {
+    models: [
+      { id: 'kimi-k2.6', name: 'Kimi K2.6', supportsImage: true },
+    ],
+    position: 'start',
+  },
   minimax: {
     models: [
       { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', supportsImage: false },
@@ -133,6 +156,9 @@ class ConfigService {
   async init() {
     try {
       const storedConfig = await localStore.getItem<AppConfig>(CONFIG_KEYS.APP_CONFIG);
+      if (!storedConfig) {
+        console.warn('[ConfigService] init: no stored config found, using defaults');
+      }
       if (storedConfig) {
         const mergedProviders = storedConfig.providers
           ? Object.fromEntries(
@@ -143,7 +169,7 @@ class ConfigService {
                 providerKey,
                 (() => {
                   const mergedProvider = {
-                    ...(defaultConfig.providers as Record<string, any>)?.[providerKey],
+                    ...((defaultConfig.providers as Record<string, unknown>)?.[providerKey] as Record<string, unknown> ?? {}),
                     ...providerConfig,
                   };
                   // Filter out removed models
@@ -168,6 +194,10 @@ class ConfigService {
                     ...mergedProvider,
                     baseUrl: normalizeProviderBaseUrl(providerKey, mergedProvider.baseUrl),
                     apiFormat: normalizeProviderApiFormat(providerKey, mergedProvider.apiFormat),
+                    models: normalizeProviderModels(
+                      providerKey,
+                      mergedProvider.models as ProviderConfig['models'],
+                    ),
                   };
                 })(),
               ])
@@ -206,7 +236,7 @@ class ConfigService {
         });
       }
     } catch (error) {
-      console.error('Failed to load config:', error);
+      console.error('[ConfigService] init failed:', error);
     }
   }
 
@@ -216,8 +246,15 @@ class ConfigService {
 
   async updateConfig(newConfig: Partial<AppConfig>) {
     const normalizedProviders = normalizeProvidersConfig(newConfig.providers as AppConfig['providers'] | undefined);
+
+    // Read-modify-write: use the latest stored value as the base to avoid
+    // overwriting fields (e.g. providers) with stale in-memory defaults when
+    // only a subset of config is being updated.
+    const stored = await localStore.getItem<AppConfig>(CONFIG_KEYS.APP_CONFIG);
+    const base = stored ?? this.config;
+
     this.config = {
-      ...this.config,
+      ...base,
       ...newConfig,
       ...(normalizedProviders ? { providers: normalizedProviders } : {}),
     };
