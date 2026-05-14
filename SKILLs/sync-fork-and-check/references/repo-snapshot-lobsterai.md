@@ -1,4 +1,4 @@
-# Repo Snapshot — shootdev/LobsterAI
+# Repo Snapshot - shootdev/LobsterAI
 
 > **Read this file before every sync.** It records the fork's custom divergence,
 > conflict-prone files, and resolution rules. Update the "Current state" section
@@ -13,25 +13,34 @@
 | **Fork** | `git@github.com:shootdev/LobsterAI.git` |
 | **Upstream** | `git@github.com:netease-youdao/LobsterAI.git` |
 | **Fork product name** | Q助理电脑机器人 |
-| **Fork version** | 2026.4.8 |
+| **Fork version** | 2026.5.12 |
 | **Build command** | `npm run build` |
-| **Node requirement** | `>=24 <25` (use `--engine-strict=false` if on v25) |
+| **Node requirement** | `>=24 <25` |
 
 ---
 
-## Current state (as of 2026-04-10)
+## Current state (as of 2026-05-14)
 
 | | Commit | Tag / Note |
 |---|---|---|
-| **Fork HEAD** | `ee29c54` | feat: merge upstream/main (2026.4.8) and preserve qzhuli parity |
-| **Last upstream merge** | `ee29c54` | merged upstream `2026.4.8` |
-| **upstream/main HEAD** | `4966ba5` | version bump `2026.4.8` |
-| **origin/main** | `b50cd69` | not yet pushed to remote |
-| **Divergence** | 0 behind · 53 ahead | build passes after merge |
+| **Fork HEAD** | `74c9f296` | feat: merge upstream/main (2026.5.12) |
+| **Last upstream merge** | `74c9f296` | merged upstream `2026.5.12` |
+| **upstream/main HEAD** | `6ea82818` | tag `2026.5.12` |
+| **origin/main** | `dcb0d1c2` | not yet pushed to remote |
+| **Divergence** | 0 behind - 62 ahead | build passes after merge |
 
-### Ahead commits (fork → upstream, newest first)
+### Ahead commits (fork -> upstream, newest first)
 
 ```text
+74c9f296 feat: merge upstream/main (2026.5.12)
+dcb0d1c2 fix(renderer): disable privacy agreement popup
+dee0a8b5 feat(im): autofill qzhuli qwen custom provider
+d58f7763 feat(release): include git commit in publish notes
+51226e5a feat(release): add mac build and publish script
+a8cd59a fix(build): harden mac openclaw runtime packaging
+58f476e feat(cron): implement buildManagedCronConfig function and update cron configuration
+dfd890b fix(renderer): open qzhuli settings from login button
+5a7f8ff fix: align post-merge types and refresh sync snapshot
 ee29c54 feat: merge upstream/main (2026.4.8) and preserve qzhuli parity
 b50cd69 fix(skills): resolve APP_CONFIG_PATH skill roots
 0b97577 docs: create roadmap (4 phases)
@@ -96,23 +105,23 @@ e5b79e6 [Feat] supports 3-party Qzhuli IM.
 The fork's primary proprietary addition. Every file it touches will conflict
 with upstream IM changes.
 
-- **Gateway class**: `src/main/im/` — `QzhuliGateway`, `qzhuliGateway` field in `imGatewayManager.ts`
-- **Binding flow**: QR code modal, auto-open on connect, `onQzhuliBindCompleted` prop in `IMSettings.tsx`
+- **Gateway class**: `src/main/im/` - `QzhuliGateway`, `qzhuliGateway` field in `imGatewayManager.ts`
+- **Binding flow**: QR code modal, auto-open on connect, `onQzhuliBindCompleted` / custom-provider sync path in `IMSettings.tsx`
 - **Platform config key**: `qzhuli` in all platform maps/unions
 - **i18n key**: `qzhuli: 'Q助理'` (zh) / `qzhuli: 'QZhuli'` (en)
 - **Logo asset**: `qzhuli.png`
 
 ### Branding
 
-- Product name: `Q助理电脑机器人` — appears in `Settings.tsx` About section, `electron-builder.json` app name, `extendInfo` strings
+- Product name: `Q助理电脑机器人` - appears in `Settings.tsx` About section, `electron-builder.json` app name, `extendInfo` strings, privacy/cowork copy
 - Copyright: `© {year}` (replaced NetEase Youdao copyright)
 - Update check URL: `https://client.qzhuli.com/sys/lobsterai_update_config` (test: `https://test.client.qzhuli.com/sys/lobsterai_update_config`)
-- Fallback download URL: `''` (intentionally empty — fork has no download page)
+- Fallback download URL: `''` (intentionally empty - fork has no download page)
 
 ### Dev tweaks (local, not committed as a rule)
 
-- `start:electron` includes `--no-sandbox` (Linux dev environment)
-- `dist:linux` uses `node scripts/prepare-dist-dir.js &&` prefix and only `build:skill:web-search` (skips tech-news/email skills)
+- `start:electron` may include `--no-sandbox` in local development
+- Local Linux packaging scripts may skip nonessential skills during ad hoc builds
 
 ---
 
@@ -120,58 +129,64 @@ with upstream IM changes.
 
 | File | Why it conflicts | Resolution rule |
 |---|---|---|
-| `src/main/im/types.ts` | Both sides add platform entries to the union type and `DEFAULT_IM_STATUS` | Keep `qzhuli` and upstream `netease-bee`; remove stale `xiaomifeng` keys |
-| `src/renderer/types/im.ts` | Same — renderer-side platform types | Mirror main types exactly; `IMPlatform` should derive from `IMGatewayConfig` |
-| `src/main/im/imGatewayManager.ts` | Both sides add `if (platform === 'X')` branches | Keep direct `qzhuli` gateway branches, keep upstream OpenClaw branches, drop stale `xiaomifeng` direct gateway code |
-| `src/main/im/imStore.ts` | Both sides add platform config fields | Keep `qzhuli` plus upstream multi-instance storage; preserve `xiaomifeng -> netease-bee` migration |
-| `src/renderer/components/im/IMSettings.tsx` | Both sides add platform UI entries | Keep QZhuli bind flow and upstream multi-instance settings; use shared `PlatformRegistry` and show `netease-bee` instead of `xiaomifeng` |
-| `src/renderer/components/Settings.tsx` | Upstream adds About section features; fork has custom branding | Keep Q助理 brand name + upstream's log-export, update-check, test-mode-unlock, user-manual features; use `© {year}` copyright |
-| `src/renderer/types/electron.d.ts` | IPC interface types extended by both sides | Mirror `src/renderer/types/im.ts` and `src/renderer/types/cowork.ts`; add new Feishu fields and `skipMissedJobs` when upstream adds them |
-| `src/renderer/store/slices/imSlice.ts` | Both sides add reducers for new platforms | Keep all `set*Config` reducers and exports for `qzhuli` and `netease-bee` |
-| `src/renderer/utils/regionFilter.ts` | Upstream moved platform visibility into shared registry | Keep registry-based filtering and add fork-only `qzhuli` to `PlatformRegistry` |
-| `src/renderer/services/i18n.ts` | Both sides add translation keys | Merge all keys; keep `qzhuli` key and fork branding copy |
-| `src/renderer/services/endpoints.ts` | Upstream uses Youdao URLs; fork uses Qzhuli URLs | Always use Qzhuli URLs (see Branding section) |
-| `src/renderer/services/appUpdate.ts` | Upstream restructures update logic | Use upstream's `endpoints.ts` import pattern; Qzhuli URLs are already in `endpoints.ts` |
-| `package.json` | Script additions, version bumps, new deps | Keep upstream scripts + fork branding/version requirements |
-| `electron-builder.json` | Upstream adds `extraResources`, fork reformats | Keep upstream `win.extraResources`; preserve fork branding assets |
+| `src/main/im/types.ts` | Both sides add platform entries to the union type and `DEFAULT_IM_STATUS` | Keep `qzhuli` and upstream multi-instance `telegram`, `discord`, `nim`, `popo`, `email`; remove stale `xiaomifeng` keys |
+| `src/renderer/types/im.ts` | Same - renderer-side platform types | Mirror main types exactly; `IMPlatform` should derive from `IMGatewayConfig` |
+| `src/renderer/types/electron.d.ts` | IPC interface types extended by both sides | Mirror renderer IM/cowork types; preserve `qzhuli` IPC plus upstream embedding, Dreaming, app-update, and session-policy fields |
+| `src/main/im/imGatewayManager.ts` | Both sides add direct gateway and OpenClaw channel branches | Keep direct `qzhuli` gateway branches and bind-status polling; keep upstream OpenClaw multi-instance branches; drop stale `xiaomifeng` direct gateway code |
+| `src/main/im/imStore.ts` | Both sides add platform config fields and migrations | Keep `qzhuli` plus upstream multi-instance storage; preserve `xiaomifeng -> netease-bee` migration |
+| `src/renderer/store/slices/imSlice.ts` | Both sides add reducers for new platforms | Keep all `set*Config` reducers and exports for `qzhuli`, `netease-bee`, and upstream multi-instance platforms |
+| `src/renderer/components/im/IMSettings.tsx` | Both sides add platform UI entries | Keep QZhuli bind flow and provider auto-fill; keep upstream multi-instance settings/components; use shared `PlatformRegistry` |
+| `src/renderer/App.tsx` | Upstream adds privacy/welcome/update state; fork adds QZhuli auto-open bind settings path | Keep upstream app-update runtime state and privacy/welcome UI; preserve `buildLoginSettingsOpenOptions()` QZhuli startup flow |
+| `src/renderer/components/Settings.tsx` | Upstream adds About/model/memory sections; fork has custom branding and IM initial platform prop | Keep Q助理 brand name + upstream log-export, update-check, Dreaming/embedding, provider registry, and user-manual features |
+| `src/renderer/components/Sidebar.tsx` | Login button layout changed upstream; fork passes `onShowLogin` navigation hook | Keep upstream compact layout and pass `onShowLogin` into `LoginButton` |
+| `src/renderer/components/agent/AgentCreateModal.tsx` | Platform binding UI moved to shared registry | Use `PlatformRegistry` and `getVisibleIMPlatforms`; `qzhuli` must be in shared platform definitions |
+| `src/renderer/services/i18n.ts` | Both sides add translation keys | Merge all keys; keep `qzhuli` key and Q助理 product-name copy |
+| `src/renderer/services/endpoints.ts` | Upstream uses Youdao URLs; fork uses Qzhuli URLs | Always use Qzhuli URLs |
+| `src/main/libs/openclawConfigSync.ts` | Upstream adds memory/bootstrap/extension diagnostics; fork adds skill-root and cron helpers | Keep upstream diagnostics and `findThirdPartyExtensionsDir`; keep `listExistingSkillsRoots`; ensure `buildManagedCronConfig()` includes `skipMissedJobs` |
+| `src/main/libs/coworkUtil.ts` | Fork skill-root handling collides with upstream proxy/runtime imports | Keep `resolveSkillsRoot`, `appendPythonRuntimeToEnv`, and upstream proxy target helper imports |
+| `src/main/skillManager.ts` | Skill root/security imports drift | Keep `resolveSkillsRoot`, `mergeReports`, and `scanMultipleSkillDirs`; remove unused scanner imports |
+| `scripts/electron-builder-hooks.cjs` | Runtime packaging hooks changed upstream; fork adds native binding verification | Keep upstream `third-party-extensions` packaging and local extension restore; keep fork `verifyRequiredNativePackages()` |
+| `package.json` | Script additions, version bumps, new deps | Keep upstream scripts/deps and version; preserve fork `description`/branding metadata |
+| `electron-builder.json` | Upstream packaging resources and fork branding collide | Keep upstream packaging resources; preserve fork product/executable names and assets |
 | `src/main/preload.ts` | Both sides expose new IPC methods | Merge all exposed methods and keep `Platform` type aligned with shared registry |
-| `src/renderer/components/agent/AgentCreateModal.tsx` | Platform lists lag behind shared types | Replace legacy `xiaomifeng` entries with `qzhuli` and `netease-bee` |
-| `src/renderer/components/scheduledTasks/utils.ts` | Package import paths can drift | Prefer the package root import when subpath typings break |
+| `src/renderer/components/scheduledTasks/utils.ts` | Package import paths can drift | Prefer package root import when subpath typings break |
 
 ## Full platform union (current)
 
 ```typescript
-'dingtalk' | 'discord' | 'feishu' | 'netease-bee' | 'nim' | 'popo' | 'qq' | 'qzhuli' | 'telegram' | 'wecom' | 'weixin'
+'dingtalk' | 'discord' | 'email' | 'feishu' | 'netease-bee' | 'nim' | 'popo' | 'qq' | 'qzhuli' | 'telegram' | 'wecom' | 'weixin'
 ```
 
 ---
 
 ## Common post-merge build artifacts
 
-These have appeared in previous syncs — check for them before declaring the build clean:
+These have appeared in previous syncs - check for them before declaring the build clean:
 
-1. **Literal `\n` in .tsx** — a merge tool encoded newlines as `\n` inside a string. The symptom is a single very long line where a multi-statement block should be. Manually expand it.
-2. **Code block outside its method** — a closing `}` was duplicated, pushing a block (e.g. the `qzhuli` branch of `runAuthProbe`) outside the method scope. Check brace count around the affected method.
-3. **Duplicate object key in `DEFAULT_IM_STATUS`** — a platform key (e.g. `qq`) appears twice. Delete the duplicate.
-4. **Missing npm package** — upstream added a dep not yet installed locally. Run `npm install --force`.
-5. **Shared type drift** — `src/renderer/types/electron.d.ts` can lag behind `src/renderer/types/im.ts` and `src/renderer/types/cowork.ts`. Update both when upstream adds fields like Feishu streaming/footer config or `skipMissedJobs`.
-6. **Stale platform key references** — legacy `xiaomifeng` references can survive in UI helpers after upstream renamed the platform to `netease-bee`. Replace them during sync.
+1. **Literal `\n` in .tsx** - a merge tool encoded newlines as `\n` inside a string. Manually expand it.
+2. **Code block outside its method** - a closing `}` was duplicated, pushing a block outside the method scope. Check brace count around the affected method.
+3. **Duplicate object key in `DEFAULT_IM_STATUS`** - a platform key appears twice. Delete the duplicate.
+4. **Missing npm package** - upstream added a dep not yet installed locally. Run `npm install --force`.
+5. **Shared type drift** - `src/renderer/types/electron.d.ts` can lag behind `src/renderer/types/im.ts` and `src/renderer/types/cowork.ts`.
+6. **Stale platform key references** - legacy `xiaomifeng` references can survive after upstream renamed the platform to `netease-bee`.
+7. **Malformed merge around `listExistingSkillsRoots`** - watch for an extra `});` in `src/main/libs/openclawConfigSync.ts`.
+8. **Unused import after combining icon lists** - `Settings.tsx` can retain unused icons such as `Cog6ToothIcon`; TypeScript catches this.
 
 ---
 
 ## Upstream latest tags (for reference)
 
 ```text
-v0.2.4
-v0.2.3
-v0.2.2
-v0.2.1
-v0.2.0
-v0.1.24
-v0.1.23
-v0.1.22
-v0.1.21
-v0.1.20
+2026.5.12
+2026.5.9
+2026.5.7
+2026.4.29
+2026.4.25
+2026.4.24
+2026.4.23
+2026.4.21
+2026.4.17
+2026.4.13
 ```
 
 ---
