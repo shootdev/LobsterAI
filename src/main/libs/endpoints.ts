@@ -33,14 +33,14 @@ export const getServerApiBaseUrl = (): string => {
 
 export const getUpdateCheckUrl = (): string => (
   isTestMode()
-    ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/update'
-    : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/update'
+    ? 'https://test.client.qzhuli.com/sys/lobsterai_update_config'
+    : 'https://client.qzhuli.com/sys/lobsterai_update_config'
 );
 
 export const getManualUpdateCheckUrl = (): string => (
   isTestMode()
-    ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/update-manual'
-    : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/update-manual'
+    ? 'https://test.client.qzhuli.com/sys/lobsterai_update_config'
+    : 'https://client.qzhuli.com/sys/lobsterai_update_config'
 );
 
 export const getFallbackDownloadUrl = (): string => (
